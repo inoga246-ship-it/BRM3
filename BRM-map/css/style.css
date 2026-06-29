@@ -36,12 +36,15 @@ html, body {
   align-items: center;
   justify-content: center;
 }
+:root {
+  --marker-color: #00d2ff;
+}
 .current-location-arrow-outer .arrow-shape {
   width: 0; height: 0;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
-  border-bottom: 18px solid #00d2ff;
-  filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.9));
+  border-bottom: 18px solid var(--marker-color);
+  filter: drop-shadow(0 0 5px var(--marker-color));
 }
 
 /* PC（チェックポイント）マーカー */
@@ -214,6 +217,68 @@ html, body {
   font-size: 11px;
   margin-top: 8px;
   line-height: 1.5;
+}
+.map-menu-section-title {
+  color: #00e5ff;
+  font-size: 13px;
+  font-weight: bold;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  border-top: 1px solid #1e293b;
+  padding-top: 12px;
+}
+.map-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.map-menu-row label { flex: 1; }
+.map-menu-row input[type="color"] {
+  width: 36px;
+  height: 28px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.map-menu-row input[type="range"] {
+  width: 110px;
+  flex-shrink: 0;
+}
+.map-menu-item.secondary {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.3);
+  margin-top: 8px;
+}
+
+/* 画面中央付近（現在地表示エリア横）のズームボタン */
+.center-zoom-controls {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.center-zoom-controls button {
+  width: 38px;
+  height: 38px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffffff;
+  background: rgba(11, 13, 19, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 
 /* ダウンロード進捗オーバーレイ */

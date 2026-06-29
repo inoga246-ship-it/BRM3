@@ -26,6 +26,11 @@
   <button id="recenterBtn" class="recenter-btn" style="display:none;">🎯 現在地</button>
 </div>
 
+<div class="center-zoom-controls">
+  <button id="zoomInBtn" title="拡大">＋</button>
+  <button id="zoomOutBtn" title="縮小">－</button>
+</div>
+
 <div id="mapMenuModal" class="map-menu-modal">
   <div class="map-menu-content">
     <div class="map-menu-header">
@@ -34,6 +39,25 @@
     </div>
     <button id="downloadAreaBtn" class="map-menu-item">💾 ルート周辺タイルを保存（事前ダウンロード）</button>
     <p class="map-menu-note">Wi-Fi等の通信環境がある場所で実行してください。完了後はオフラインでも保存済みの範囲が地図表示に使えます。</p>
+
+    <div class="map-menu-section-title">表示設定</div>
+    <div class="map-menu-row">
+      <label for="markerColorInput">現在地マーカーの色</label>
+      <input type="color" id="markerColorInput" value="#00d2ff">
+    </div>
+    <div class="map-menu-row">
+      <label for="routeColorInput">ルート線の色</label>
+      <input type="color" id="routeColorInput" value="#ff8c00">
+    </div>
+    <div class="map-menu-row">
+      <label for="routeWidthInput">ルート線の太さ <span id="routeWidthValue">4</span>px</label>
+      <input type="range" id="routeWidthInput" min="1" max="10" step="1" value="4">
+    </div>
+    <div class="map-menu-row">
+      <label for="routeOpacityInput">ルート線の透過度 <span id="routeOpacityValue">85</span>%</label>
+      <input type="range" id="routeOpacityInput" min="10" max="100" step="5" value="85">
+    </div>
+    <button id="resetDisplaySettingsBtn" class="map-menu-item secondary">表示設定を初期値に戻す</button>
   </div>
 </div>
 

@@ -25,6 +25,10 @@ let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
 let currentRotationDeg = 0; // 現在の地図回転角（heading-upモード用）
 
+// 表示設定（マーカー色・ルート線の色/太さ/透過度）
+const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
+let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
+
 // ===== DOM参照 =====
 const statusText = document.getElementById("statusText");
 const backBtn = document.getElementById("backBtn");
@@ -40,6 +44,15 @@ const downloadProgressOverlay = document.getElementById("downloadProgressOverlay
 const downloadProgressText = document.getElementById("downloadProgressText");
 const downloadProgressFill = document.getElementById("downloadProgressFill");
 const cancelDownloadBtn = document.getElementById("cancelDownloadBtn");
+const markerColorInput = document.getElementById("markerColorInput");
+const routeColorInput = document.getElementById("routeColorInput");
+const routeWidthInput = document.getElementById("routeWidthInput");
+const routeWidthValue = document.getElementById("routeWidthValue");
+const routeOpacityInput = document.getElementById("routeOpacityInput");
+const routeOpacityValue = document.getElementById("routeOpacityValue");
+const resetDisplaySettingsBtn = document.getElementById("resetDisplaySettingsBtn");
+const zoomInBtn = document.getElementById("zoomInBtn");
+const zoomOutBtn = document.getElementById("zoomOutBtn");
 
 function setStatus(text) { statusText.innerText = text; }
 
@@ -72,7 +85,7 @@ function loadRouteFromLocalStorage() {
 function drawRoute() {
   if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
   if (routeLatLngs.length === 0) return;
-  routeLine = L.polyline(routeLatLngs, { color: "#ff8c00", weight: 4, opacity: 0.85 }).addTo(map);
+  routeLine = L.polyline(routeLatLngs, { color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity }).addTo(map);
   map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
 }
 
@@ -268,6 +281,56 @@ menuCloseBtn.addEventListener("click", closeMapMenu);
 mapMenuModal.addEventListener("click", (e) => { if (e.target === mapMenuModal) closeMapMenu(); });
 downloadAreaBtn.addEventListener("click", () => { downloadRouteArea(); });
 
+// ===== 表示設定（マーカー色・ルート線の色/太さ/透過度） =====
+function loadDisplaySettings() {
+  try {
+    const raw = localStorage.getItem("mapDisplaySettings");
+    if (raw) displaySettings = { ...DEFAULT_DISPLAY_SETTINGS, ...JSON.parse(raw) };
+  } catch (e) { displaySettings = { ...DEFAULT_DISPLAY_SETTINGS }; }
+}
+function saveDisplaySettings() {
+  localStorage.setItem("mapDisplaySettings", JSON.stringify(displaySettings));
+}
+function applyDisplaySettingsToUI() {
+  markerColorInput.value = displaySettings.markerColor;
+  routeColorInput.value = displaySettings.routeColor;
+  routeWidthInput.value = displaySettings.routeWidth;
+  routeWidthValue.innerText = displaySettings.routeWidth;
+  routeOpacityInput.value = Math.round(displaySettings.routeOpacity * 100);
+  routeOpacityValue.innerText = Math.round(displaySettings.routeOpacity * 100);
+}
+function applyDisplaySettingsToMap() {
+  document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
+  if (routeLine) routeLine.setStyle({ color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity });
+}
+
+markerColorInput.addEventListener("input", () => {
+  displaySettings.markerColor = markerColorInput.value;
+  applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+routeColorInput.addEventListener("input", () => {
+  displaySettings.routeColor = routeColorInput.value;
+  applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+routeWidthInput.addEventListener("input", () => {
+  displaySettings.routeWidth = Number(routeWidthInput.value);
+  routeWidthValue.innerText = displaySettings.routeWidth;
+  applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+routeOpacityInput.addEventListener("input", () => {
+  displaySettings.routeOpacity = Number(routeOpacityInput.value) / 100;
+  routeOpacityValue.innerText = Number(routeOpacityInput.value);
+  applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+resetDisplaySettingsBtn.addEventListener("click", () => {
+  displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
+  applyDisplaySettingsToUI(); applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+
+// ===== 画面中央付近のズームボタン =====
+zoomInBtn.addEventListener("click", () => { map.zoomIn(); });
+zoomOutBtn.addEventListener("click", () => { map.zoomOut(); });
+
 // ===== 地図の向き（北が上 / 進行方向が上） =====
 function applyMapRotation(angleDeg) {
   currentRotationDeg = angleDeg;
@@ -410,7 +473,11 @@ recenterBtn.addEventListener("click", () => {
 
 // ===== 初期化 =====
 function initMap() {
-  map = L.map("map", { zoomControl: true, attributionControl: true }).setView([35.681, 139.767], 13);
+  loadDisplaySettings();
+  applyDisplaySettingsToUI();
+  document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
+
+  map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
   const offlineLayer = new OfflineTileLayer({
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
