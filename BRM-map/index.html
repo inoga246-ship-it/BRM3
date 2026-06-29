@@ -42,7 +42,20 @@
 
     <div class="map-menu-section-title">表示設定</div>
     <div class="map-menu-row">
-      <label for="markerColorInput">現在地マーカーの色</label>
+      <label>現在地マークの形</label>
+    </div>
+    <div class="marker-shape-grid">
+      <button type="button" class="marker-shape-option" data-shape="arrow" title="矢印（進行方向を表示）">
+        <span class="shape-preview shape-preview-arrow"></span>矢印
+      </button>
+      <button type="button" class="marker-shape-option" data-shape="circle" title="丸">
+        <span class="shape-preview shape-preview-circle"></span>丸
+      </button>
+      <button type="button" class="marker-shape-option" data-shape="bike" title="自転車">🚲 自転車</button>
+      <button type="button" class="marker-shape-option" data-shape="pin" title="ピン">📍 ピン</button>
+    </div>
+    <div class="map-menu-row">
+      <label for="markerColorInput">現在地マーカーの色<br><span class="map-menu-subnote">（矢印・丸の形のみ反映されます）</span></label>
       <input type="color" id="markerColorInput" value="#00d2ff">
     </div>
     <div class="map-menu-row">
@@ -58,6 +71,12 @@
       <input type="range" id="routeOpacityInput" min="10" max="100" step="5" value="85">
     </div>
     <button id="resetDisplaySettingsBtn" class="map-menu-item secondary">表示設定を初期値に戻す</button>
+
+    <div class="map-menu-section-title">通知設定</div>
+    <div class="map-menu-row">
+      <label for="offRouteSoundToggle">🔔 ルート逸脱時に音で通知</label>
+      <input type="checkbox" id="offRouteSoundToggle" checked>
+    </div>
   </div>
 </div>
 

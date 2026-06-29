@@ -25,8 +25,54 @@ let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
 let currentRotationDeg = 0; // 現在の地図回転角（heading-upモード用）
 
+// ルート逸脱通知（音）：逸脱した瞬間に1回、その後は一定間隔で再通知する（鳴り続けて煩わしくならないように抑制）
+let audioCtx = null;
+let lastOffRouteAlertTime = 0;
+let wasOffRoute = false;
+const OFF_ROUTE_ALERT_INTERVAL_MS = 30000; // 再通知の間隔（30秒）
+let offRouteSoundEnabled = true;
+
+function loadOffRouteSoundSetting() {
+  const raw = localStorage.getItem("offRouteSoundEnabled");
+  offRouteSoundEnabled = raw === null ? true : raw === "true";
+  offRouteSoundToggle.checked = offRouteSoundEnabled;
+}
+offRouteSoundToggle.addEventListener("change", () => {
+  offRouteSoundEnabled = offRouteSoundToggle.checked;
+  localStorage.setItem("offRouteSoundEnabled", String(offRouteSoundEnabled));
+});
+
+function playOffRouteBeep() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    [0, 0.18].forEach((offset) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.15);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(now + offset); osc.stop(now + offset + 0.16);
+    });
+  } catch (e) { /* AudioContext未対応・ユーザー操作前の自動再生制限などは無視する */ }
+}
+
+function notifyOffRouteIfNeeded(isOffRoute) {
+  const now = Date.now();
+  if (isOffRoute && offRouteSoundEnabled) {
+    if (!wasOffRoute || (now - lastOffRouteAlertTime) >= OFF_ROUTE_ALERT_INTERVAL_MS) {
+      playOffRouteBeep();
+      lastOffRouteAlertTime = now;
+    }
+  }
+  wasOffRoute = isOffRoute;
+}
+
 // 表示設定（マーカー色・ルート線の色/太さ/透過度）
-const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
+const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", markerShape: "arrow", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
 let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
 
 // ===== DOM参照 =====
@@ -45,12 +91,14 @@ const downloadProgressText = document.getElementById("downloadProgressText");
 const downloadProgressFill = document.getElementById("downloadProgressFill");
 const cancelDownloadBtn = document.getElementById("cancelDownloadBtn");
 const markerColorInput = document.getElementById("markerColorInput");
+const markerShapeOptions = Array.from(document.querySelectorAll(".marker-shape-option"));
 const routeColorInput = document.getElementById("routeColorInput");
 const routeWidthInput = document.getElementById("routeWidthInput");
 const routeWidthValue = document.getElementById("routeWidthValue");
 const routeOpacityInput = document.getElementById("routeOpacityInput");
 const routeOpacityValue = document.getElementById("routeOpacityValue");
 const resetDisplaySettingsBtn = document.getElementById("resetDisplaySettingsBtn");
+const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 const zoomInBtn = document.getElementById("zoomInBtn");
 const zoomOutBtn = document.getElementById("zoomOutBtn");
 
@@ -82,11 +130,31 @@ function loadRouteFromLocalStorage() {
   } catch (e) { return false; }
 }
 
-function drawRoute() {
+function drawRoute(skipFitBounds) {
   if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
   if (routeLatLngs.length === 0) return;
   routeLine = L.polyline(routeLatLngs, { color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity }).addTo(map);
-  map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+  if (!skipFitBounds) map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+}
+
+// ===== 地図の表示位置（中心座標・ズームレベル）の保持 =====
+// MAIN画面⇔地図画面を行き来した際に、毎回ルート全体表示に戻ってしまわないよう、
+// 直前の表示位置をlocalStorageに保存し、次回はそれを復元する。
+function saveMapViewState() {
+  if (!map) return;
+  try {
+    const center = map.getCenter();
+    localStorage.setItem("mapViewState", JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() }));
+  } catch (e) {}
+}
+function loadMapViewState() {
+  try {
+    const raw = localStorage.getItem("mapViewState");
+    if (!raw) return null;
+    const state = JSON.parse(raw);
+    if (typeof state.lat === "number" && typeof state.lng === "number" && typeof state.zoom === "number") return state;
+  } catch (e) {}
+  return null;
 }
 
 // ===== ①PC・②休憩スポットの簡易パース（BRM PACE MANAGER本体のリスト書式に対応） =====
@@ -298,15 +366,23 @@ function applyDisplaySettingsToUI() {
   routeWidthValue.innerText = displaySettings.routeWidth;
   routeOpacityInput.value = Math.round(displaySettings.routeOpacity * 100);
   routeOpacityValue.innerText = Math.round(displaySettings.routeOpacity * 100);
+  markerShapeOptions.forEach(btn => btn.classList.toggle("selected", btn.dataset.shape === displaySettings.markerShape));
 }
 function applyDisplaySettingsToMap() {
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   if (routeLine) routeLine.setStyle({ color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity });
+  if (currentMarker) currentMarker.setIcon(buildCurrentMarkerIcon());
 }
 
 markerColorInput.addEventListener("input", () => {
   displaySettings.markerColor = markerColorInput.value;
   applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+markerShapeOptions.forEach(btn => {
+  btn.addEventListener("click", () => {
+    displaySettings.markerShape = btn.dataset.shape;
+    applyDisplaySettingsToUI(); applyDisplaySettingsToMap(); saveDisplaySettings();
+  });
 });
 routeColorInput.addEventListener("input", () => {
   displaySettings.routeColor = routeColorInput.value;
@@ -328,8 +404,99 @@ resetDisplaySettingsBtn.addEventListener("click", () => {
 });
 
 // ===== 画面中央付近のズームボタン =====
-zoomInBtn.addEventListener("click", () => { map.zoomIn(); });
-zoomOutBtn.addEventListener("click", () => { map.zoomOut(); });
+// ===== 画面中央付近のズームボタン（長押しで2個セットのまま自由に移動できる） =====
+let suppressZoomBtnClick = false;
+zoomInBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomIn(); });
+zoomOutBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomOut(); });
+
+const centerZoomControls = document.querySelector(".center-zoom-controls");
+const LONG_PRESS_MS = 450;
+const MOVE_CANCEL_PX = 8;
+
+function clampZoomControlsPosition(left, top) {
+  const rect = centerZoomControls.getBoundingClientRect();
+  const w = rect.width || 46, h = rect.height || 96;
+  const maxLeft = window.innerWidth - w - 4;
+  const maxTop = window.innerHeight - h - 4;
+  return { left: Math.min(Math.max(4, left), Math.max(4, maxLeft)), top: Math.min(Math.max(4, top), Math.max(4, maxTop)) };
+}
+
+function saveZoomControlsPosition(left, top) {
+  try { localStorage.setItem("mapZoomBtnPos", JSON.stringify({ left, top })); } catch (e) {}
+}
+
+function restoreZoomControlsPosition() {
+  try {
+    const raw = localStorage.getItem("mapZoomBtnPos");
+    if (!raw) return;
+    const pos = JSON.parse(raw);
+    if (typeof pos.left !== "number" || typeof pos.top !== "number") return;
+    const clamped = clampZoomControlsPosition(pos.left, pos.top);
+    centerZoomControls.style.right = "auto";
+    centerZoomControls.style.transform = "none";
+    centerZoomControls.style.left = clamped.left + "px";
+    centerZoomControls.style.top = clamped.top + "px";
+  } catch (e) {}
+}
+
+centerZoomControls.addEventListener("pointerdown", (e) => {
+  const startX = e.clientX, startY = e.clientY;
+  let moved = false;
+  let dragging = false;
+  let elStartLeft = 0, elStartTop = 0;
+
+  const longPressTimer = setTimeout(() => {
+    if (moved) return;
+    dragging = true;
+    const rect = centerZoomControls.getBoundingClientRect();
+    elStartLeft = rect.left; elStartTop = rect.top;
+    centerZoomControls.style.right = "auto";
+    centerZoomControls.style.transform = "none";
+    centerZoomControls.style.left = elStartLeft + "px";
+    centerZoomControls.style.top = elStartTop + "px";
+    centerZoomControls.classList.add("dragging");
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+  }, LONG_PRESS_MS);
+
+  function onMove(ev) {
+    const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if (!moved && (Math.abs(dx) > MOVE_CANCEL_PX || Math.abs(dy) > MOVE_CANCEL_PX)) {
+      moved = true;
+      if (!dragging) clearTimeout(longPressTimer);
+    }
+    if (dragging) {
+      ev.preventDefault();
+      const clamped = clampZoomControlsPosition(elStartLeft + dx, elStartTop + dy);
+      centerZoomControls.style.left = clamped.left + "px";
+      centerZoomControls.style.top = clamped.top + "px";
+    }
+  }
+  function onUp() {
+    clearTimeout(longPressTimer);
+    if (dragging) {
+      dragging = false;
+      suppressZoomBtnClick = true; // ドラッグ操作後の意図しないズーム実行を防ぐ
+      centerZoomControls.classList.remove("dragging");
+      const rect = centerZoomControls.getBoundingClientRect();
+      saveZoomControlsPosition(rect.left, rect.top);
+    }
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onUp);
+  }
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onUp);
+});
+
+window.addEventListener("resize", () => {
+  const rect = centerZoomControls.getBoundingClientRect();
+  if (centerZoomControls.style.left && centerZoomControls.style.left !== "auto") {
+    const clamped = clampZoomControlsPosition(rect.left, rect.top);
+    centerZoomControls.style.left = clamped.left + "px";
+    centerZoomControls.style.top = clamped.top + "px";
+  }
+});
 
 // ===== 地図の向き（北が上 / 進行方向が上） =====
 function applyMapRotation(angleDeg) {
@@ -365,17 +532,31 @@ orientationModeBtn.addEventListener("click", () => {
   setOrientationMode(mapOrientationMode === "north" ? "heading" : "north");
 });
 
+// ===== 現在地マーカーのアイコン生成（形状：矢印／丸／自転車／ピンから選択可能） =====
+function buildCurrentMarkerIcon() {
+  const shape = displaySettings.markerShape || "arrow";
+  let html, size, anchor;
+  if (shape === "circle") {
+    html = '<div class="current-location-circle"></div>';
+    size = [18, 18]; anchor = [9, 9];
+  } else if (shape === "bike") {
+    html = '<div class="current-location-emoji">🚲</div>';
+    size = [26, 26]; anchor = [13, 18];
+  } else if (shape === "pin") {
+    html = '<div class="current-location-emoji">📍</div>';
+    size = [26, 26]; anchor = [13, 24];
+  } else {
+    html = '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>';
+    size = [26, 26]; anchor = [13, 13];
+  }
+  return L.divIcon({ className: "current-location-wrapper", html, iconSize: size, iconAnchor: anchor });
+}
+
 // ===== 現在地マーカー（進行方向矢印付き） =====
 function updateCurrentMarker(lat, lon, headingDeg) {
   const latlng = [lat, lon];
   if (!currentMarker) {
-    const icon = L.divIcon({
-      className: "current-location-wrapper",
-      html: '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13]
-    });
-    currentMarker = L.marker(latlng, { icon, zIndexOffset: 1000 }).addTo(map);
+    currentMarker = L.marker(latlng, { icon: buildCurrentMarkerIcon(), zIndexOffset: 1000 }).addTo(map);
   } else {
     currentMarker.setLatLng(latlng);
   }
@@ -402,8 +583,10 @@ function onGpsPosition(pos) {
       setStatus(`現在 ${matched.toFixed(1)} km地点`);
       // BRM PACE MANAGER側（同一オリジン）にも現在距離を反映しておく
       try { localStorage.setItem("distance", matched.toFixed(1)); } catch (e) {}
+      notifyOffRouteIfNeeded(false);
     } else {
       setStatus("ルートから離れています");
+      notifyOffRouteIfNeeded(true);
     }
   } else {
     setStatus("ルート未読込（現在地のみ表示）");
@@ -454,16 +637,13 @@ function setFollowMode(on) {
 }
 
 // ===== 戻るボタン =====
-// BRM PACE MANAGER側から遷移してきた場合はブラウザ履歴で戻るのが最も確実（配置場所によらず正しく戻れる）。
-// 履歴がない場合（直接このURLを開いた場合など）のみ、同階層の index.html への遷移を試みる。
+// フォルダ配置を固定（BRM-main / BRM-map が兄弟フォルダ）としているため、
+// 履歴の有無に依存せず、常に直接アドレスへ遷移する。
 backBtn.addEventListener("click", () => {
   stopContinuousGps();
   releaseWakeLock();
-  if (window.history.length > 1) {
-    window.history.back();
-  } else {
-    window.location.href = "../index.html";
-  }
+  saveMapViewState();
+  window.location.href = "../BRM-main/index.html";
 });
 
 recenterBtn.addEventListener("click", () => {
@@ -476,6 +656,8 @@ function initMap() {
   loadDisplaySettings();
   applyDisplaySettingsToUI();
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
+  loadOffRouteSoundSetting();
+  restoreZoomControlsPosition();
 
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
   const offlineLayer = new OfflineTileLayer({
@@ -487,12 +669,16 @@ function initMap() {
   map.on("dragstart", () => setFollowMode(false));
 
   const hasRoute = loadRouteFromLocalStorage();
+  const savedView = loadMapViewState();
   if (hasRoute) {
-    drawRoute();
+    drawRoute(!!savedView); // 保存済みの表示位置がある場合は、ルート全体表示への自動fitを行わない
     renderPcShopMarkers();
     setStatus(`ルート読込済（全長 ${routePoints[routePoints.length - 1].dist.toFixed(1)}km）`);
   } else {
     setStatus("ルート未読込（BRM PACE MANAGER側でGPXを読込んでください）");
+  }
+  if (savedView) {
+    map.setView([savedView.lat, savedView.lng], savedView.zoom, { animate: false });
   }
 
   startContinuousGps();
@@ -506,5 +692,14 @@ if ("serviceWorker" in navigator) {
 
 initMap();
 
+// 音通知のブラウザ自動再生制限を回避するため、最初のタップでAudioContextを初期化/再開しておく
+document.addEventListener("pointerdown", function unlockAudioOnce() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
+  document.removeEventListener("pointerdown", unlockAudioOnce);
+}, { once: true });
+
 // ページを離れる際はGPS・WakeLockを確実に解放してバッテリーを保護する
-window.addEventListener("pagehide", () => { stopContinuousGps(); releaseWakeLock(); });
+window.addEventListener("pagehide", () => { saveMapViewState(); stopContinuousGps(); releaseWakeLock(); });
