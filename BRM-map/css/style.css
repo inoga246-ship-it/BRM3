@@ -1,0 +1,283 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #0b0d13;
+  font-family: 'Segoe UI', 'Hiragino Sans', 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+}
+
+/* 地図の回転（進行方向を上に）に対応するための外側ラッパー */
+#mapOuter {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+}
+#map {
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%;
+  height: 200%;
+  background: #1e293b;
+  transform-origin: 50% 50%;
+  transition: transform 0.25s linear;
+}
+
+/* 現在地マーカー（方向矢印付き） */
+.current-location-wrapper { background: none; border: none; }
+.current-location-arrow-outer {
+  width: 26px; height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.current-location-arrow-outer .arrow-shape {
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 18px solid #00d2ff;
+  filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.9));
+}
+
+/* PC（チェックポイント）マーカー */
+.pc-marker-icon { background: none; border: none; }
+.pc-marker-dot {
+  background: #00d2ff;
+  color: #04222b;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid #ffffff;
+  white-space: nowrap;
+  box-shadow: 0 0 6px rgba(0, 210, 255, 0.8);
+  transform: translate(-50%, -100%);
+}
+
+/* 休憩スポットマーカー */
+.shop-marker-icon { background: none; border: none; }
+.shop-marker-dot {
+  background: #0b3d2e;
+  color: #00ff99;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 50%;
+  border: 1px solid #00ff99;
+  box-shadow: 0 0 5px rgba(0, 255, 153, 0.7);
+  transform: translate(-50%, -100%);
+}
+
+/* ヘッダー */
+.map-header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  background: linear-gradient(180deg, rgba(8, 10, 15, 0.92) 0%, rgba(8, 10, 15, 0.5) 100%);
+}
+#backBtn, #menuBtn {
+  font-size: 16px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.map-title {
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-style: italic;
+  font-size: 17px;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(0, 210, 255, 0.6);
+  flex-shrink: 0;
+}
+.map-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: #00ff66;
+  background: rgba(0, 255, 102, 0.08);
+  border: 1px solid rgba(0, 255, 102, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  text-shadow: 0 0 6px rgba(0, 255, 102, 0.4);
+}
+
+/* 下部ツールバー */
+.map-bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(8, 10, 15, 0.92) 0%, rgba(8, 10, 15, 0.5) 100%);
+  flex-wrap: wrap;
+}
+.map-bottom-bar button {
+  font-size: 13px;
+  font-weight: bold;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#wakeLockBtn.active {
+  color: #00ff66;
+  border-color: #00ff66;
+  background: rgba(0, 255, 102, 0.12);
+  text-shadow: 0 0 6px rgba(0, 255, 102, 0.6);
+}
+#orientationModeBtn.heading-mode {
+  color: #ffcc00;
+  border-color: #ffcc00;
+  background: rgba(255, 204, 0, 0.12);
+  text-shadow: 0 0 6px rgba(255, 204, 0, 0.6);
+}
+.recenter-btn {
+  margin-left: auto;
+  color: #ffcc00 !important;
+  border-color: rgba(255, 204, 0, 0.5) !important;
+  background: rgba(255, 204, 0, 0.1) !important;
+}
+
+/* メニュー（エリア保存ボタンの誤操作防止のため、ここに収納） */
+.map-menu-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2500;
+  background: rgba(4, 5, 8, 0.85);
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+.map-menu-modal.open { display: flex; }
+.map-menu-content {
+  background: #0f131a;
+  border: 1px solid #00e5ff;
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.2);
+}
+.map-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 8px;
+}
+#menuCloseBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+}
+.map-menu-item {
+  width: 100%;
+  font-size: 13px;
+  font-weight: bold;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+}
+.map-menu-note {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* ダウンロード進捗オーバーレイ */
+.download-progress-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 3000;
+  background: rgba(4, 5, 8, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.download-progress-box {
+  background: #0f131a;
+  border: 1px solid #00e5ff;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.25);
+}
+.download-progress-title {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.download-progress-text {
+  color: #00e5ff;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.download-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #1e293b;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.download-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00aa66 0%, #00ffcc 100%);
+  transition: width 0.2s ease;
+}
+.download-progress-note {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-bottom: 14px;
+}
+#cancelDownloadBtn {
+  font-size: 13px;
+  color: #ff6666;
+  background: rgba(255, 102, 102, 0.1);
+  border: 1px solid rgba(255, 102, 102, 0.4);
+  border-radius: 8px;
+  padding: 6px 16px;
+  cursor: pointer;
+}
+
+/* Leafletのデフォルト帰属表示など最低限の調整 */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
