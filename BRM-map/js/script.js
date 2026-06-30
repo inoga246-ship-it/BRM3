@@ -32,6 +32,7 @@ let lastOffRouteAlertTime = 0;
 let wasOffRoute = false;
 const OFF_ROUTE_ALERT_INTERVAL_MS = 30000; // 再通知の間隔（30秒）
 let offRouteSoundEnabled = true;
+const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 
 function loadOffRouteSoundSetting() {
   const raw = localStorage.getItem("offRouteSoundEnabled");
@@ -100,7 +101,6 @@ const routeOpacityInput = document.getElementById("routeOpacityInput");
 const routeOpacityValue = document.getElementById("routeOpacityValue");
 const resetDisplaySettingsBtn = document.getElementById("resetDisplaySettingsBtn");
 const resetIconPositionsBtn = document.getElementById("resetIconPositionsBtn");
-const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 const zoomInBtn = document.getElementById("zoomInBtn");
 const zoomOutBtn = document.getElementById("zoomOutBtn");
 
