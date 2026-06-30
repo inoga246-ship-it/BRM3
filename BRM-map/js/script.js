@@ -72,7 +72,7 @@ function notifyOffRouteIfNeeded(isOffRoute) {
 }
 
 // 表示設定（マーカー色・ルート線の色/太さ/透過度）
-const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", markerShape: "arrow", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
+const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
 let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
 
 // ===== DOM参照 =====
@@ -91,7 +91,6 @@ const downloadProgressText = document.getElementById("downloadProgressText");
 const downloadProgressFill = document.getElementById("downloadProgressFill");
 const cancelDownloadBtn = document.getElementById("cancelDownloadBtn");
 const markerColorInput = document.getElementById("markerColorInput");
-const markerShapeOptions = Array.from(document.querySelectorAll(".marker-shape-option"));
 const routeColorInput = document.getElementById("routeColorInput");
 const routeWidthInput = document.getElementById("routeWidthInput");
 const routeWidthValue = document.getElementById("routeWidthValue");
@@ -366,23 +365,15 @@ function applyDisplaySettingsToUI() {
   routeWidthValue.innerText = displaySettings.routeWidth;
   routeOpacityInput.value = Math.round(displaySettings.routeOpacity * 100);
   routeOpacityValue.innerText = Math.round(displaySettings.routeOpacity * 100);
-  markerShapeOptions.forEach(btn => btn.classList.toggle("selected", btn.dataset.shape === displaySettings.markerShape));
 }
 function applyDisplaySettingsToMap() {
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   if (routeLine) routeLine.setStyle({ color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity });
-  if (currentMarker) currentMarker.setIcon(buildCurrentMarkerIcon());
 }
 
 markerColorInput.addEventListener("input", () => {
   displaySettings.markerColor = markerColorInput.value;
   applyDisplaySettingsToMap(); saveDisplaySettings();
-});
-markerShapeOptions.forEach(btn => {
-  btn.addEventListener("click", () => {
-    displaySettings.markerShape = btn.dataset.shape;
-    applyDisplaySettingsToUI(); applyDisplaySettingsToMap(); saveDisplaySettings();
-  });
 });
 routeColorInput.addEventListener("input", () => {
   displaySettings.routeColor = routeColorInput.value;
@@ -404,99 +395,8 @@ resetDisplaySettingsBtn.addEventListener("click", () => {
 });
 
 // ===== 画面中央付近のズームボタン =====
-// ===== 画面中央付近のズームボタン（長押しで2個セットのまま自由に移動できる） =====
-let suppressZoomBtnClick = false;
-zoomInBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomIn(); });
-zoomOutBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomOut(); });
-
-const centerZoomControls = document.querySelector(".center-zoom-controls");
-const LONG_PRESS_MS = 450;
-const MOVE_CANCEL_PX = 8;
-
-function clampZoomControlsPosition(left, top) {
-  const rect = centerZoomControls.getBoundingClientRect();
-  const w = rect.width || 46, h = rect.height || 96;
-  const maxLeft = window.innerWidth - w - 4;
-  const maxTop = window.innerHeight - h - 4;
-  return { left: Math.min(Math.max(4, left), Math.max(4, maxLeft)), top: Math.min(Math.max(4, top), Math.max(4, maxTop)) };
-}
-
-function saveZoomControlsPosition(left, top) {
-  try { localStorage.setItem("mapZoomBtnPos", JSON.stringify({ left, top })); } catch (e) {}
-}
-
-function restoreZoomControlsPosition() {
-  try {
-    const raw = localStorage.getItem("mapZoomBtnPos");
-    if (!raw) return;
-    const pos = JSON.parse(raw);
-    if (typeof pos.left !== "number" || typeof pos.top !== "number") return;
-    const clamped = clampZoomControlsPosition(pos.left, pos.top);
-    centerZoomControls.style.right = "auto";
-    centerZoomControls.style.transform = "none";
-    centerZoomControls.style.left = clamped.left + "px";
-    centerZoomControls.style.top = clamped.top + "px";
-  } catch (e) {}
-}
-
-centerZoomControls.addEventListener("pointerdown", (e) => {
-  const startX = e.clientX, startY = e.clientY;
-  let moved = false;
-  let dragging = false;
-  let elStartLeft = 0, elStartTop = 0;
-
-  const longPressTimer = setTimeout(() => {
-    if (moved) return;
-    dragging = true;
-    const rect = centerZoomControls.getBoundingClientRect();
-    elStartLeft = rect.left; elStartTop = rect.top;
-    centerZoomControls.style.right = "auto";
-    centerZoomControls.style.transform = "none";
-    centerZoomControls.style.left = elStartLeft + "px";
-    centerZoomControls.style.top = elStartTop + "px";
-    centerZoomControls.classList.add("dragging");
-    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
-  }, LONG_PRESS_MS);
-
-  function onMove(ev) {
-    const dx = ev.clientX - startX, dy = ev.clientY - startY;
-    if (!moved && (Math.abs(dx) > MOVE_CANCEL_PX || Math.abs(dy) > MOVE_CANCEL_PX)) {
-      moved = true;
-      if (!dragging) clearTimeout(longPressTimer);
-    }
-    if (dragging) {
-      ev.preventDefault();
-      const clamped = clampZoomControlsPosition(elStartLeft + dx, elStartTop + dy);
-      centerZoomControls.style.left = clamped.left + "px";
-      centerZoomControls.style.top = clamped.top + "px";
-    }
-  }
-  function onUp() {
-    clearTimeout(longPressTimer);
-    if (dragging) {
-      dragging = false;
-      suppressZoomBtnClick = true; // ドラッグ操作後の意図しないズーム実行を防ぐ
-      centerZoomControls.classList.remove("dragging");
-      const rect = centerZoomControls.getBoundingClientRect();
-      saveZoomControlsPosition(rect.left, rect.top);
-    }
-    document.removeEventListener("pointermove", onMove);
-    document.removeEventListener("pointerup", onUp);
-    document.removeEventListener("pointercancel", onUp);
-  }
-  document.addEventListener("pointermove", onMove);
-  document.addEventListener("pointerup", onUp);
-  document.addEventListener("pointercancel", onUp);
-});
-
-window.addEventListener("resize", () => {
-  const rect = centerZoomControls.getBoundingClientRect();
-  if (centerZoomControls.style.left && centerZoomControls.style.left !== "auto") {
-    const clamped = clampZoomControlsPosition(rect.left, rect.top);
-    centerZoomControls.style.left = clamped.left + "px";
-    centerZoomControls.style.top = clamped.top + "px";
-  }
-});
+zoomInBtn.addEventListener("click", () => { map.zoomIn(); });
+zoomOutBtn.addEventListener("click", () => { map.zoomOut(); });
 
 // ===== 地図の向き（北が上 / 進行方向が上） =====
 function applyMapRotation(angleDeg) {
@@ -532,31 +432,17 @@ orientationModeBtn.addEventListener("click", () => {
   setOrientationMode(mapOrientationMode === "north" ? "heading" : "north");
 });
 
-// ===== 現在地マーカーのアイコン生成（形状：矢印／丸／自転車／ピンから選択可能） =====
-function buildCurrentMarkerIcon() {
-  const shape = displaySettings.markerShape || "arrow";
-  let html, size, anchor;
-  if (shape === "circle") {
-    html = '<div class="current-location-circle"></div>';
-    size = [18, 18]; anchor = [9, 9];
-  } else if (shape === "bike") {
-    html = '<div class="current-location-emoji">🚲</div>';
-    size = [26, 26]; anchor = [13, 18];
-  } else if (shape === "pin") {
-    html = '<div class="current-location-emoji">📍</div>';
-    size = [26, 26]; anchor = [13, 24];
-  } else {
-    html = '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>';
-    size = [26, 26]; anchor = [13, 13];
-  }
-  return L.divIcon({ className: "current-location-wrapper", html, iconSize: size, iconAnchor: anchor });
-}
-
 // ===== 現在地マーカー（進行方向矢印付き） =====
 function updateCurrentMarker(lat, lon, headingDeg) {
   const latlng = [lat, lon];
   if (!currentMarker) {
-    currentMarker = L.marker(latlng, { icon: buildCurrentMarkerIcon(), zIndexOffset: 1000 }).addTo(map);
+    const icon = L.divIcon({
+      className: "current-location-wrapper",
+      html: '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+    currentMarker = L.marker(latlng, { icon, zIndexOffset: 1000 }).addTo(map);
   } else {
     currentMarker.setLatLng(latlng);
   }
@@ -657,7 +543,6 @@ function initMap() {
   applyDisplaySettingsToUI();
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   loadOffRouteSoundSetting();
-  restoreZoomControlsPosition();
 
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
   const offlineLayer = new OfflineTileLayer({
