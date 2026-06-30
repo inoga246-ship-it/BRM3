@@ -20,11 +20,8 @@
   <button id="menuBtn" title="メニュー">☰</button>
 </div>
 
-<div class="map-bottom-bar">
-  <button id="wakeLockBtn">🔓 画面OFF可</button>
-  <button id="orientationModeBtn" title="地図の向き">🧭 北が上</button>
-  <button id="recenterBtn" class="recenter-btn" style="display:none;">🎯 現在地</button>
-</div>
+<div id="orientationModeBtn" class="floating-icon-btn" title="地図の向き">🧭</div>
+<div id="recenterBtn" class="floating-icon-btn recenter-icon" title="現在地に戻る" style="display:none;">🎯</div>
 
 <div class="center-zoom-controls">
   <button id="zoomInBtn" title="拡大">＋</button>
@@ -42,7 +39,20 @@
 
     <div class="map-menu-section-title">表示設定</div>
     <div class="map-menu-row">
-      <label for="markerColorInput">現在地マーカーの色</label>
+      <label>現在地マークの形</label>
+    </div>
+    <div class="marker-shape-grid">
+      <button type="button" class="marker-shape-option" data-shape="arrow" title="矢印（進行方向を表示）">
+        <span class="shape-preview shape-preview-arrow"></span>矢印
+      </button>
+      <button type="button" class="marker-shape-option" data-shape="circle" title="丸">
+        <span class="shape-preview shape-preview-circle"></span>丸
+      </button>
+      <button type="button" class="marker-shape-option" data-shape="bike" title="自転車">🚲 自転車</button>
+      <button type="button" class="marker-shape-option" data-shape="pin" title="ピン">📍 ピン</button>
+    </div>
+    <div class="map-menu-row">
+      <label for="markerColorInput">現在地マーカーの色<br><span class="map-menu-subnote">（矢印・丸の形のみ反映されます）</span></label>
       <input type="color" id="markerColorInput" value="#00d2ff">
     </div>
     <div class="map-menu-row">
@@ -64,6 +74,13 @@
       <label for="offRouteSoundToggle">🔔 ルート逸脱時に音で通知</label>
       <input type="checkbox" id="offRouteSoundToggle" checked>
     </div>
+
+    <div class="map-menu-section-title">画面設定</div>
+    <div class="map-menu-row">
+      <label for="wakeLockToggle">🔒 走行中、画面を常にONにする</label>
+      <input type="checkbox" id="wakeLockToggle">
+    </div>
+    <button id="resetIconPositionsBtn" class="map-menu-item secondary">📍 地図上アイコンの位置を初期化</button>
   </div>
 </div>
 

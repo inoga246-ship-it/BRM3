@@ -12,6 +12,7 @@ let map = null;
 let routeLatLngs = [];   // [[lat,lon], ...] 表示用
 let routePoints = [];    // [{lat, lon, dist}, ...] 距離マッチング用
 let routeLine = null;
+let routeDirectionMarkers = [];
 let currentMarker = null;
 let pcMarkers = [];
 let shopMarkers = [];
@@ -72,7 +73,7 @@ function notifyOffRouteIfNeeded(isOffRoute) {
 }
 
 // 表示設定（マーカー色・ルート線の色/太さ/透過度）
-const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
+const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", markerShape: "arrow", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
 let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
 
 // ===== DOM参照 =====
@@ -82,7 +83,7 @@ const menuBtn = document.getElementById("menuBtn");
 const menuCloseBtn = document.getElementById("menuCloseBtn");
 const mapMenuModal = document.getElementById("mapMenuModal");
 const downloadAreaBtn = document.getElementById("downloadAreaBtn");
-const wakeLockBtn = document.getElementById("wakeLockBtn");
+const wakeLockToggle = document.getElementById("wakeLockToggle");
 const orientationModeBtn = document.getElementById("orientationModeBtn");
 const recenterBtn = document.getElementById("recenterBtn");
 const mapEl = document.getElementById("map");
@@ -91,12 +92,14 @@ const downloadProgressText = document.getElementById("downloadProgressText");
 const downloadProgressFill = document.getElementById("downloadProgressFill");
 const cancelDownloadBtn = document.getElementById("cancelDownloadBtn");
 const markerColorInput = document.getElementById("markerColorInput");
+const markerShapeOptions = Array.from(document.querySelectorAll(".marker-shape-option"));
 const routeColorInput = document.getElementById("routeColorInput");
 const routeWidthInput = document.getElementById("routeWidthInput");
 const routeWidthValue = document.getElementById("routeWidthValue");
 const routeOpacityInput = document.getElementById("routeOpacityInput");
 const routeOpacityValue = document.getElementById("routeOpacityValue");
 const resetDisplaySettingsBtn = document.getElementById("resetDisplaySettingsBtn");
+const resetIconPositionsBtn = document.getElementById("resetIconPositionsBtn");
 const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 const zoomInBtn = document.getElementById("zoomInBtn");
 const zoomOutBtn = document.getElementById("zoomOutBtn");
@@ -134,6 +137,43 @@ function drawRoute(skipFitBounds) {
   if (routeLatLngs.length === 0) return;
   routeLine = L.polyline(routeLatLngs, { color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity }).addTo(map);
   if (!skipFitBounds) map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+}
+
+// 2地点間の方位角(度、北=0、時計回り)を計算
+function calcBearing(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => d * Math.PI / 180;
+  const toDeg = (r) => r * 180 / Math.PI;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+// ルートの進行方向を示す小さな矢印を、間隔を空けて控えめに表示する（邪魔にならない程度の本数・透過度）
+function renderRouteDirectionArrows() {
+  routeDirectionMarkers.forEach(m => map.removeLayer(m));
+  routeDirectionMarkers = [];
+  if (routePoints.length < 2) return;
+
+  const totalDist = routePoints[routePoints.length - 1].dist;
+  if (!totalDist || totalDist <= 0) return;
+  // ルート全長に応じて間隔を調整し、矢印が密集しすぎないようにする（最大40本程度を目安）
+  const spacingKm = Math.max(2, totalDist / 40);
+
+  let nextTargetDist = spacingKm;
+  for (let i = 1; i < routePoints.length; i++) {
+    if (routePoints[i].dist < nextTargetDist) continue;
+    const prev = routePoints[i - 1], cur = routePoints[i];
+    const bearing = calcBearing(prev.lat, prev.lon, cur.lat, cur.lon);
+    const icon = L.divIcon({
+      className: "route-direction-arrow-wrapper",
+      html: `<div class="route-direction-arrow" style="transform: rotate(${bearing}deg);"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+    const marker = L.marker([cur.lat, cur.lon], { icon, interactive: false, keyboard: false }).addTo(map);
+    routeDirectionMarkers.push(marker);
+    nextTargetDist += spacingKm;
+  }
 }
 
 // ===== 地図の表示位置（中心座標・ズームレベル）の保持 =====
@@ -365,15 +405,24 @@ function applyDisplaySettingsToUI() {
   routeWidthValue.innerText = displaySettings.routeWidth;
   routeOpacityInput.value = Math.round(displaySettings.routeOpacity * 100);
   routeOpacityValue.innerText = Math.round(displaySettings.routeOpacity * 100);
+  markerShapeOptions.forEach(btn => btn.classList.toggle("selected", btn.dataset.shape === displaySettings.markerShape));
 }
 function applyDisplaySettingsToMap() {
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
+  document.documentElement.style.setProperty("--route-arrow-color", displaySettings.routeColor);
   if (routeLine) routeLine.setStyle({ color: displaySettings.routeColor, weight: displaySettings.routeWidth, opacity: displaySettings.routeOpacity });
+  if (currentMarker) currentMarker.setIcon(buildCurrentMarkerIcon());
 }
 
 markerColorInput.addEventListener("input", () => {
   displaySettings.markerColor = markerColorInput.value;
   applyDisplaySettingsToMap(); saveDisplaySettings();
+});
+markerShapeOptions.forEach(btn => {
+  btn.addEventListener("click", () => {
+    displaySettings.markerShape = btn.dataset.shape;
+    applyDisplaySettingsToUI(); applyDisplaySettingsToMap(); saveDisplaySettings();
+  });
 });
 routeColorInput.addEventListener("input", () => {
   displaySettings.routeColor = routeColorInput.value;
@@ -393,10 +442,125 @@ resetDisplaySettingsBtn.addEventListener("click", () => {
   displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
   applyDisplaySettingsToUI(); applyDisplaySettingsToMap(); saveDisplaySettings();
 });
+resetIconPositionsBtn.addEventListener("click", () => {
+  resetFloatingIconPositions();
+  alert("地図上アイコンの位置を初期状態に戻しました。");
+});
 
-// ===== 画面中央付近のズームボタン =====
-zoomInBtn.addEventListener("click", () => { map.zoomIn(); });
-zoomOutBtn.addEventListener("click", () => { map.zoomOut(); });
+// ===== 地図上に浮かぶアイコン/ボタン群の長押しフリー移動（汎用） =====
+const LONG_PRESS_MS = 450;
+const MOVE_CANCEL_PX = 8;
+const draggableRegistry = []; // resize時の一括再クランプ・初期化用にまとめて保持
+
+function clampPosition(el, left, top) {
+  const rect = el.getBoundingClientRect();
+  const w = rect.width || 44, h = rect.height || 44;
+  const maxLeft = window.innerWidth - w - 4;
+  const maxTop = window.innerHeight - h - 4;
+  return { left: Math.min(Math.max(4, left), Math.max(4, maxLeft)), top: Math.min(Math.max(4, top), Math.max(4, maxTop)) };
+}
+
+// el: 対象要素（単体ボタンでも、複数ボタンをまとめたラッパーでも可）
+// storageKey: 位置保存用のlocalStorageキー
+// onTap: 長押し(ドラッグ)に至らなかった通常タップ時に呼ぶコールバック（任意）
+function makeFloatingDraggable(el, storageKey, onTap) {
+  function applyPos(left, top) {
+    el.style.right = "auto";
+    el.style.transform = "none";
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+  function restore() {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const pos = JSON.parse(raw);
+      if (typeof pos.left !== "number" || typeof pos.top !== "number") return;
+      const clamped = clampPosition(el, pos.left, pos.top);
+      applyPos(clamped.left, clamped.top);
+    } catch (e) {}
+  }
+  function reset() {
+    localStorage.removeItem(storageKey);
+    el.style.left = ""; el.style.top = ""; el.style.right = ""; el.style.transform = "";
+  }
+  function reclamp() {
+    if (el.style.left && el.style.left !== "auto") {
+      const rect = el.getBoundingClientRect();
+      const clamped = clampPosition(el, rect.left, rect.top);
+      applyPos(clamped.left, clamped.top);
+    }
+  }
+
+  let suppressClick = false;
+  el.addEventListener("pointerdown", (e) => {
+    const startX = e.clientX, startY = e.clientY;
+    let moved = false, dragging = false, elStartLeft = 0, elStartTop = 0;
+
+    const longPressTimer = setTimeout(() => {
+      if (moved) return;
+      dragging = true;
+      const rect = el.getBoundingClientRect();
+      elStartLeft = rect.left; elStartTop = rect.top;
+      applyPos(elStartLeft, elStartTop);
+      el.classList.add("dragging");
+      if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+    }, LONG_PRESS_MS);
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!moved && (Math.abs(dx) > MOVE_CANCEL_PX || Math.abs(dy) > MOVE_CANCEL_PX)) {
+        moved = true;
+        if (!dragging) clearTimeout(longPressTimer);
+      }
+      if (dragging) {
+        ev.preventDefault();
+        const clamped = clampPosition(el, elStartLeft + dx, elStartTop + dy);
+        applyPos(clamped.left, clamped.top);
+      }
+    }
+    function onUp() {
+      clearTimeout(longPressTimer);
+      if (dragging) {
+        dragging = false;
+        suppressClick = true;
+        el.classList.remove("dragging");
+        const rect = el.getBoundingClientRect();
+        localStorage.setItem(storageKey, JSON.stringify({ left: rect.left, top: rect.top }));
+      }
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+    }
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+  });
+
+  if (onTap) {
+    el.addEventListener("click", () => {
+      if (suppressClick) { suppressClick = false; return; }
+      onTap();
+    });
+  }
+
+  draggableRegistry.push({ reclamp, restore, reset });
+  return { restore, reset };
+}
+
+window.addEventListener("resize", () => { draggableRegistry.forEach(d => d.reclamp()); });
+
+function restoreFloatingIconPositions() { draggableRegistry.forEach(d => d.restore()); }
+function resetFloatingIconPositions() {
+  draggableRegistry.forEach(d => d.reset());
+}
+
+// ----- ズームボタン（2個セット） -----
+const centerZoomControls = document.querySelector(".center-zoom-controls");
+let suppressZoomBtnClick = false;
+zoomInBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomIn(); });
+zoomOutBtn.addEventListener("click", () => { if (suppressZoomBtnClick) { suppressZoomBtnClick = false; return; } map.zoomOut(); });
+makeFloatingDraggable(centerZoomControls, "mapZoomBtnPos", null);
 
 // ===== 地図の向き（北が上 / 進行方向が上） =====
 function applyMapRotation(angleDeg) {
@@ -418,7 +582,7 @@ function applyMapRotation(angleDeg) {
 function setOrientationMode(mode) {
   mapOrientationMode = mode;
   orientationModeBtn.classList.toggle("heading-mode", mode === "heading");
-  orientationModeBtn.innerText = mode === "heading" ? "🧭 進行方向が上" : "🧭 北が上";
+  orientationModeBtn.title = mode === "heading" ? "地図の向き：進行方向が上（タップで北が上に切替）" : "地図の向き：北が上（タップで進行方向が上に切替）";
   if (mode === "north") {
     map.dragging.enable();
     applyMapRotation(0);
@@ -428,21 +592,35 @@ function setOrientationMode(mode) {
   }
 }
 
-orientationModeBtn.addEventListener("click", () => {
+makeFloatingDraggable(orientationModeBtn, "mapOrientationBtnPos", () => {
   setOrientationMode(mapOrientationMode === "north" ? "heading" : "north");
 });
+
+// ===== 現在地マーカーのアイコン生成（形状：矢印／丸／自転車／ピンから選択可能） =====
+function buildCurrentMarkerIcon() {
+  const shape = displaySettings.markerShape || "arrow";
+  let html, size, anchor;
+  if (shape === "circle") {
+    html = '<div class="current-location-circle"></div>';
+    size = [18, 18]; anchor = [9, 9];
+  } else if (shape === "bike") {
+    html = '<div class="current-location-emoji">🚲</div>';
+    size = [26, 26]; anchor = [13, 18];
+  } else if (shape === "pin") {
+    html = '<div class="current-location-emoji">📍</div>';
+    size = [26, 26]; anchor = [13, 24];
+  } else {
+    html = '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>';
+    size = [26, 26]; anchor = [13, 13];
+  }
+  return L.divIcon({ className: "current-location-wrapper", html, iconSize: size, iconAnchor: anchor });
+}
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 function updateCurrentMarker(lat, lon, headingDeg) {
   const latlng = [lat, lon];
   if (!currentMarker) {
-    const icon = L.divIcon({
-      className: "current-location-wrapper",
-      html: '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13]
-    });
-    currentMarker = L.marker(latlng, { icon, zIndexOffset: 1000 }).addTo(map);
+    currentMarker = L.marker(latlng, { icon: buildCurrentMarkerIcon(), zIndexOffset: 1000 }).addTo(map);
   } else {
     currentMarker.setLatLng(latlng);
   }
@@ -493,33 +671,40 @@ function stopContinuousGps() {
 
 // ===== 画面の自動消灯防止（Wake Lock API） =====
 async function requestWakeLock() {
-  if (!("wakeLock" in navigator)) { wakeLockEnabled = false; updateWakeLockBtnUI(); return; }
+  if (!("wakeLock" in navigator)) { wakeLockEnabled = false; updateWakeLockToggleUI(); return; }
   try {
     wakeLockSentinel = await navigator.wakeLock.request("screen");
     wakeLockEnabled = true;
-    wakeLockSentinel.addEventListener("release", () => { wakeLockEnabled = false; updateWakeLockBtnUI(); });
+    wakeLockSentinel.addEventListener("release", () => { wakeLockEnabled = false; updateWakeLockToggleUI(); });
   } catch (e) {
     wakeLockEnabled = false;
   }
-  updateWakeLockBtnUI();
+  updateWakeLockToggleUI();
 }
 function releaseWakeLock() {
   if (wakeLockSentinel) { wakeLockSentinel.release().catch(() => {}); wakeLockSentinel = null; }
   wakeLockEnabled = false;
-  updateWakeLockBtnUI();
+  updateWakeLockToggleUI();
 }
-function updateWakeLockBtnUI() {
-  wakeLockBtn.classList.toggle("active", wakeLockEnabled);
-  wakeLockBtn.innerText = wakeLockEnabled ? "🔒 画面ON中" : "🔓 画面OFF可";
+function updateWakeLockToggleUI() {
+  wakeLockToggle.checked = wakeLockEnabled;
 }
-wakeLockBtn.addEventListener("click", () => {
-  if (wakeLockEnabled) releaseWakeLock(); else requestWakeLock();
+wakeLockToggle.addEventListener("change", () => {
+  localStorage.setItem("wakeLockPreferred", String(wakeLockToggle.checked));
+  if (wakeLockToggle.checked) requestWakeLock(); else releaseWakeLock();
 });
+// 画面が再びアクティブになった際（バックグラウンドから復帰等）、希望がONならWake Lockを再取得する
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && localStorage.getItem("wakeLockPreferred") !== "false" && !wakeLockEnabled) {
+    requestWakeLock();
+  }
+});
+
 
 // ===== 地図の手動操作でフォロー解除 =====
 function setFollowMode(on) {
   followMode = on;
-  recenterBtn.style.display = on ? "none" : "inline-block";
+  recenterBtn.style.display = on ? "none" : "flex";
 }
 
 // ===== 戻るボタン =====
@@ -532,7 +717,7 @@ backBtn.addEventListener("click", () => {
   window.location.href = "../BRM-main/index.html";
 });
 
-recenterBtn.addEventListener("click", () => {
+makeFloatingDraggable(recenterBtn, "mapRecenterBtnPos", () => {
   setFollowMode(true);
   if (currentMarker) map.setView(currentMarker.getLatLng(), map.getZoom(), { animate: true });
 });
@@ -542,7 +727,9 @@ function initMap() {
   loadDisplaySettings();
   applyDisplaySettingsToUI();
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
+  document.documentElement.style.setProperty("--route-arrow-color", displaySettings.routeColor);
   loadOffRouteSoundSetting();
+  restoreFloatingIconPositions();
 
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
   const offlineLayer = new OfflineTileLayer({
@@ -567,7 +754,8 @@ function initMap() {
   }
 
   startContinuousGps();
-  requestWakeLock();
+  if (localStorage.getItem("wakeLockPreferred") !== "false") requestWakeLock();
+  renderRouteDirectionArrows();
 }
 
 // Service Worker登録（対応環境のみ。アプリ本体ファイルをオフラインキャッシュし、次回以降はネット接続なしでも起動できるようにする）
