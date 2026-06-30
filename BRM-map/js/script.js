@@ -26,6 +26,10 @@ let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
 let currentRotationDeg = 0; // 現在の地図回転角（heading-upモード用）
 
+// 瞬間速度の計算に使う直近のGPS履歴
+let gpsHistory = []; // [{lat, lon, time}] 直近GPS点の履歴
+const GPS_SPEED_WINDOW_SEC = 30; // 直近何秒分のGPS点で速度を計算するか
+
 // ルート逸脱通知（音）：逸脱した瞬間に1回、その後は一定間隔で再通知する（鳴り続けて煩わしくならないように抑制）
 let audioCtx = null;
 let lastOffRouteAlertTime = 0;
@@ -80,6 +84,17 @@ let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
 // ===== DOM参照 =====
 const statusText = document.getElementById("statusText");
 const backBtn = document.getElementById("backBtn");
+const headerGross = document.getElementById("headerGross");
+const headerRemain = document.getElementById("headerRemain");
+const speedWidget = document.getElementById("speedWidget");
+const widgetSpeed = document.getElementById("widgetSpeed");
+const widgetGross = document.getElementById("widgetGross");
+const widgetRemain = document.getElementById("widgetRemain");
+const layerRouteToggle = document.getElementById("layerRouteToggle");
+const layerArrowToggle = document.getElementById("layerArrowToggle");
+const layerPcToggle = document.getElementById("layerPcToggle");
+const layerShopToggle = document.getElementById("layerShopToggle");
+const layerSpeedWidgetToggle = document.getElementById("layerSpeedWidgetToggle");
 const menuBtn = document.getElementById("menuBtn");
 const menuCloseBtn = document.getElementById("menuCloseBtn");
 const mapMenuModal = document.getElementById("mapMenuModal");
@@ -447,6 +462,55 @@ resetIconPositionsBtn.addEventListener("click", () => {
   alert("地図上アイコンの位置を初期状態に戻しました。");
 });
 
+// ===== レイヤー表示ON/OFFトグル =====
+function applyLayerVisibility() {
+  // ルート線
+  if (routeLine) { routeLine.getElement && (routeLine.getElement() ? routeLine.getElement().style.display = layerRouteToggle.checked ? "" : "none" : null); if (!layerRouteToggle.checked) { if (routeLine) map.removeLayer(routeLine); routeLine = null; } else if (!routeLine && routeLatLngs.length > 0) { drawRoute(true); } }
+  // ルート線の表示/非表示はaddLayer/removeLayerでないと確実に反映されないため、より確実な方法を使う
+}
+
+function setLayerVisible(markers, visible) {
+  markers.forEach(m => { const el = m.getElement ? m.getElement() : null; if (el) el.style.display = visible ? "" : "none"; });
+}
+
+layerRouteToggle.addEventListener("change", () => {
+  localStorage.setItem("layerRoute", layerRouteToggle.checked);
+  if (layerRouteToggle.checked) { if (!routeLine && routeLatLngs.length > 0) drawRoute(true); }
+  else { if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
+});
+layerArrowToggle.addEventListener("change", () => {
+  localStorage.setItem("layerArrow", layerArrowToggle.checked);
+  if (layerArrowToggle.checked) { if (routeDirectionMarkers.length === 0 && routePoints.length > 0) renderRouteDirectionArrows(); else setLayerVisible(routeDirectionMarkers, true); }
+  else { setLayerVisible(routeDirectionMarkers, false); }
+});
+layerPcToggle.addEventListener("change", () => {
+  localStorage.setItem("layerPc", layerPcToggle.checked);
+  if (layerPcToggle.checked) { if (pcMarkers.length === 0 && routePoints.length > 0) renderPcShopMarkers(); else setLayerVisible(pcMarkers, true); }
+  else { setLayerVisible(pcMarkers, false); }
+});
+layerShopToggle.addEventListener("change", () => {
+  localStorage.setItem("layerShop", layerShopToggle.checked);
+  if (layerShopToggle.checked) { if (shopMarkers.length === 0 && routePoints.length > 0) renderPcShopMarkers(); else setLayerVisible(shopMarkers, true); }
+  else { setLayerVisible(shopMarkers, false); }
+});
+layerSpeedWidgetToggle.addEventListener("change", () => {
+  localStorage.setItem("layerSpeedWidget", layerSpeedWidgetToggle.checked);
+  speedWidget.style.display = layerSpeedWidgetToggle.checked ? "block" : "none";
+});
+
+// レイヤーのON/OFF設定をlocalStorageから復元する
+function loadLayerSettings() {
+  const load = (key, toggle, defaultVal) => {
+    const raw = localStorage.getItem(key);
+    toggle.checked = raw === null ? defaultVal : raw === "true";
+  };
+  load("layerRoute", layerRouteToggle, true);
+  load("layerArrow", layerArrowToggle, true);
+  load("layerPc", layerPcToggle, true);
+  load("layerShop", layerShopToggle, true);
+  load("layerSpeedWidget", layerSpeedWidgetToggle, true);
+}
+
 // ===== 地図上に浮かぶアイコン/ボタン群の長押しフリー移動（汎用） =====
 const LONG_PRESS_MS = 450;
 const MOVE_CANCEL_PX = 8;
@@ -637,9 +701,51 @@ function updateCurrentMarker(lat, lon, headingDeg) {
 }
 
 // ===== GPS常時追従（地図モード表示中のみ。ページを離れたら停止する） =====
+// ヘッダーとウィジェットのペース・速度表示を更新する
+function updatePaceDisplay(latitude, longitude) {
+  const now = Date.now();
+
+  // 瞬間速度の計算：直近GPS_SPEED_WINDOW_SEC秒以内のGPS点との移動距離÷時間
+  gpsHistory.push({ lat: latitude, lon: longitude, time: now });
+  const cutoff = now - GPS_SPEED_WINDOW_SEC * 1000;
+  gpsHistory = gpsHistory.filter(p => p.time >= cutoff);
+  let instantSpeedKph = null;
+  if (gpsHistory.length >= 2) {
+    const oldest = gpsHistory[0], newest = gpsHistory[gpsHistory.length - 1];
+    const distKm = calcHaversineDistance(oldest.lat, oldest.lon, newest.lat, newest.lon);
+    const elapsedHour = (newest.time - oldest.time) / 3600000;
+    if (elapsedHour > 0) instantSpeedKph = distKm / elapsedHour;
+  }
+
+  // グロス速度・残り距離の計算（BRM-mainとlocalStorageを共有）
+  let grossKph = null, remainKm = null;
+  try {
+    const startTimeStr = localStorage.getItem("startTime");
+    const brmVal = localStorage.getItem("brm") || "200,13.5";
+    const targetDistance = parseFloat(brmVal.split(",")[0]) || 200;
+    const currentDist = lastMatchedDist !== null ? lastMatchedDist : parseFloat(localStorage.getItem("distance") || "0") || 0;
+    if (startTimeStr) {
+      const start = new Date(startTimeStr);
+      const elapsedHour = (now - start.getTime()) / 3600000;
+      if (elapsedHour > 0 && currentDist > 0) grossKph = currentDist / elapsedHour;
+    }
+    remainKm = Math.max(0, targetDistance - (lastMatchedDist || 0));
+  } catch (e) {}
+
+  // ヘッダー更新
+  headerGross.innerText = grossKph !== null ? `G:${grossKph.toFixed(1)}km/h` : "G:--";
+  headerRemain.innerText = remainKm !== null ? `残${remainKm.toFixed(1)}km` : "残--km";
+
+  // ウィジェット更新
+  widgetSpeed.innerHTML = instantSpeedKph !== null ? `${instantSpeedKph.toFixed(1)} <span class="speed-unit">km/h</span>` : `-- <span class="speed-unit">km/h</span>`;
+  widgetGross.innerHTML = grossKph !== null ? `${grossKph.toFixed(1)} <span class="speed-unit">km/h</span>` : `-- <span class="speed-unit">km/h</span>`;
+  widgetRemain.innerHTML = remainKm !== null ? `${remainKm.toFixed(1)} <span class="speed-unit">km</span>` : `-- <span class="speed-unit">km</span>`;
+}
+
 function onGpsPosition(pos) {
   const { latitude, longitude, heading } = pos.coords;
   updateCurrentMarker(latitude, longitude, (heading === undefined ? null : heading));
+  updatePaceDisplay(latitude, longitude);
   if (routePoints.length > 0) {
     const matched = matchPositionToRoute(latitude, longitude, lastMatchedDist);
     if (matched !== null) {
@@ -729,7 +835,14 @@ function initMap() {
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   document.documentElement.style.setProperty("--route-arrow-color", displaySettings.routeColor);
   loadOffRouteSoundSetting();
+  loadLayerSettings();
+
+  // ウィジェットをフリー移動可能にする（ズーム・🧭・🎯と同じmakeFloatingDraggableを使用）
+  makeFloatingDraggable(speedWidget, "mapSpeedWidgetPos", null);
   restoreFloatingIconPositions();
+
+  // 読み込んだレイヤー設定をウィジェット初期表示に反映
+  speedWidget.style.display = layerSpeedWidgetToggle.checked ? "block" : "none";
 
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
   const offlineLayer = new OfflineTileLayer({
@@ -743,8 +856,12 @@ function initMap() {
   const hasRoute = loadRouteFromLocalStorage();
   const savedView = loadMapViewState();
   if (hasRoute) {
-    drawRoute(!!savedView); // 保存済みの表示位置がある場合は、ルート全体表示への自動fitを行わない
+    drawRoute(!!savedView);
     renderPcShopMarkers();
+    // レイヤー設定に応じて初期表示状態を適用
+    if (!layerRouteToggle.checked && routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    if (!layerPcToggle.checked) setLayerVisible(pcMarkers, false);
+    if (!layerShopToggle.checked) setLayerVisible(shopMarkers, false);
     setStatus(`ルート読込済（全長 ${routePoints[routePoints.length - 1].dist.toFixed(1)}km）`);
   } else {
     setStatus("ルート未読込（BRM PACE MANAGER側でGPXを読込んでください）");
@@ -755,7 +872,8 @@ function initMap() {
 
   startContinuousGps();
   if (localStorage.getItem("wakeLockPreferred") !== "false") requestWakeLock();
-  renderRouteDirectionArrows();
+
+  if (layerArrowToggle.checked) renderRouteDirectionArrows();
 }
 
 // Service Worker登録（対応環境のみ。アプリ本体ファイルをオフラインキャッシュし、次回以降はネット接続なしでも起動できるようにする）
