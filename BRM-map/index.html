@@ -14,14 +14,27 @@
 </div>
 
 <div class="map-header">
-  <button id="backBtn" title="ペース管理に戻る">← 戻る</button>
-  <div class="header-pace-display">
-    <span id="headerGross" class="header-pace-value">--</span>
-    <span class="header-pace-sep">/</span>
-    <span id="headerRemain" class="header-pace-value">--</span>
+  <div class="map-header-row1">
+    <button id="backBtn" title="ペース管理に戻る">← 戻る</button>
+    <div class="header-pace-display">
+      <span id="headerGross" class="header-pace-value">--</span>
+      <span class="header-pace-sep">/</span>
+      <span id="headerRemain" class="header-pace-value">--</span>
+    </div>
+    <span id="statusText" class="map-status">GPS待機中…</span>
+    <button id="menuBtn" title="メニュー">☰</button>
   </div>
-  <span id="statusText" class="map-status">GPS待機中…</span>
-  <button id="menuBtn" title="メニュー">☰</button>
+  <div class="map-header-row2" id="headerRow2">
+    <span class="hdr2-item" id="hdr2Speed" style="display:none;"><span class="hdr2-label">速度</span><span class="hdr2-value" id="hdr2SpeedVal">--</span><span class="hdr2-unit">km/h</span></span>
+    <span class="hdr2-sep hdr2-speed-sep" style="display:none;">│</span>
+    <span class="hdr2-item" id="hdr2Elapsed" style="display:none;"><span class="hdr2-label">経過</span><span class="hdr2-value" id="hdr2ElapsedVal">--</span></span>
+    <span class="hdr2-sep hdr2-elapsed-sep" style="display:none;">│</span>
+    <span class="hdr2-item" id="hdr2RemainTime" style="display:none;"><span class="hdr2-label">残時間</span><span class="hdr2-value" id="hdr2RemainTimeVal">--</span></span>
+    <span class="hdr2-sep hdr2-remaintime-sep" style="display:none;">│</span>
+    <span class="hdr2-item" id="hdr2Need" style="display:none;"><span class="hdr2-label">必要</span><span class="hdr2-value" id="hdr2NeedVal">--</span><span class="hdr2-unit">km/h</span></span>
+    <span class="hdr2-sep hdr2-need-sep" style="display:none;">│</span>
+    <span class="hdr2-item" id="hdr2Saving" style="display:none;"><span class="hdr2-label">貯金</span><span class="hdr2-value" id="hdr2SavingVal">--</span></span>
+  </div>
 </div>
 
 <div id="orientationModeBtn" class="floating-icon-btn" title="地図の向き">🧭</div>
@@ -55,6 +68,28 @@
     </div>
     <button id="downloadAreaBtn" class="map-menu-item">💾 ルート周辺タイルを保存（事前ダウンロード）</button>
     <p class="map-menu-note">Wi-Fi等の通信環境がある場所で実行してください。完了後はオフラインでも保存済みの範囲が地図表示に使えます。</p>
+
+    <div class="map-menu-section-title">ヘッダー2行目の表示項目</div>
+    <div class="map-menu-row">
+      <label for="hdr2SpeedToggle">🚀 現在速度</label>
+      <input type="checkbox" id="hdr2SpeedToggle">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdr2ElapsedToggle">⏱ 経過時間</label>
+      <input type="checkbox" id="hdr2ElapsedToggle">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdr2RemainTimeToggle">⏳ 残り時間</label>
+      <input type="checkbox" id="hdr2RemainTimeToggle">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdr2NeedToggle">⚡ 必要平均速度</label>
+      <input type="checkbox" id="hdr2NeedToggle">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdr2SavingToggle">💰 貯金時間</label>
+      <input type="checkbox" id="hdr2SavingToggle">
+    </div>
 
     <div class="map-menu-section-title">地図の表示項目</div>
     <div class="map-menu-row">

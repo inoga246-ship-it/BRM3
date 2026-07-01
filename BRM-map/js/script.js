@@ -38,6 +38,52 @@ const OFF_ROUTE_ALERT_INTERVAL_MS = 30000; // 再通知の間隔（30秒）
 let offRouteSoundEnabled = true;
 const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 
+// ===== ヘッダー2段目の表示項目管理 =====
+// HDR2_ITEMSはDOM参照(hdr2SpeedToggle等)がすべて確定した後に定義する
+let HDR2_ITEMS;
+function initHdr2Items() {
+  HDR2_ITEMS = [
+    { toggle: hdr2SpeedToggle, el: hdr2Speed, sep: ".hdr2-speed-sep", key: "hdr2Speed" },
+    { toggle: hdr2ElapsedToggle, el: hdr2Elapsed, sep: ".hdr2-elapsed-sep", key: "hdr2Elapsed" },
+    { toggle: hdr2RemainTimeToggle, el: hdr2RemainTime, sep: ".hdr2-remaintime-sep", key: "hdr2RemainTime" },
+    { toggle: hdr2NeedToggle, el: hdr2Need, sep: ".hdr2-need-sep", key: "hdr2Need" },
+    { toggle: hdr2SavingToggle, el: hdr2Saving, sep: ".hdr2-saving-sep", key: "hdr2Saving" },
+  ];
+}
+
+function saveHdr2Settings() {
+  const obj = {};
+  HDR2_ITEMS.forEach(item => { obj[item.key] = item.toggle.checked; });
+  localStorage.setItem("mapHdr2Settings", JSON.stringify(obj));
+}
+function loadHdr2Settings() {
+  try {
+    const raw = localStorage.getItem("mapHdr2Settings");
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    HDR2_ITEMS.forEach(item => { if (obj[item.key] !== undefined) item.toggle.checked = !!obj[item.key]; });
+  } catch (e) {}
+}
+function applyHdr2Visibility() {
+  HDR2_ITEMS.forEach(item => {
+    item.el.style.display = item.toggle.checked ? "inline-flex" : "none";
+  });
+  HDR2_ITEMS.forEach((item, idx) => {
+    const sepEl = headerRow2.querySelector(item.sep);
+    if (!sepEl) return;
+    const leftVisible = idx > 0 && HDR2_ITEMS[idx - 1].toggle.checked;
+    const rightVisible = item.toggle.checked;
+    sepEl.style.display = (leftVisible && rightVisible) ? "inline" : "none";
+  });
+  const anyVisible = HDR2_ITEMS.some(i => i.toggle.checked);
+  headerRow2.style.display = anyVisible ? "flex" : "none";
+}
+function setupHdr2Listeners() {
+  HDR2_ITEMS.forEach(item => {
+    item.toggle.addEventListener("change", () => { applyHdr2Visibility(); saveHdr2Settings(); });
+  });
+}
+
 function loadOffRouteSoundSetting() {
   const raw = localStorage.getItem("offRouteSoundEnabled");
   offRouteSoundEnabled = raw === null ? true : raw === "true";
@@ -90,6 +136,22 @@ const speedWidget = document.getElementById("speedWidget");
 const widgetSpeed = document.getElementById("widgetSpeed");
 const widgetGross = document.getElementById("widgetGross");
 const widgetRemain = document.getElementById("widgetRemain");
+const headerRow2 = document.getElementById("headerRow2");
+const hdr2Speed = document.getElementById("hdr2Speed");
+const hdr2Elapsed = document.getElementById("hdr2Elapsed");
+const hdr2RemainTime = document.getElementById("hdr2RemainTime");
+const hdr2Need = document.getElementById("hdr2Need");
+const hdr2Saving = document.getElementById("hdr2Saving");
+const hdr2SpeedVal = document.getElementById("hdr2SpeedVal");
+const hdr2ElapsedVal = document.getElementById("hdr2ElapsedVal");
+const hdr2RemainTimeVal = document.getElementById("hdr2RemainTimeVal");
+const hdr2NeedVal = document.getElementById("hdr2NeedVal");
+const hdr2SavingVal = document.getElementById("hdr2SavingVal");
+const hdr2SpeedToggle = document.getElementById("hdr2SpeedToggle");
+const hdr2ElapsedToggle = document.getElementById("hdr2ElapsedToggle");
+const hdr2RemainTimeToggle = document.getElementById("hdr2RemainTimeToggle");
+const hdr2NeedToggle = document.getElementById("hdr2NeedToggle");
+const hdr2SavingToggle = document.getElementById("hdr2SavingToggle");
 const layerRouteToggle = document.getElementById("layerRouteToggle");
 const layerArrowToggle = document.getElementById("layerArrowToggle");
 const layerPcToggle = document.getElementById("layerPcToggle");
@@ -637,11 +699,11 @@ function applyMapRotation(angleDeg) {
   if (currentMarker) {
     const el = currentMarker.getElement();
     if (el) {
-      const inner = el.querySelector(".arrow-shape");
-      if (inner) {
-        // heading-upモードでは常に上向き(矢印そのものは回転しない)、north-upモードでは実際の進行方向角度を反映する
+      // SVG矢印全体(current-location-arrow-outer)を回転させる
+      const outer = el.querySelector(".current-location-arrow-outer");
+      if (outer) {
         const arrowAngle = mapOrientationMode === "heading" ? 0 : angleDeg;
-        inner.style.transform = `rotate(${arrowAngle}deg)`;
+        outer.style.transform = `rotate(${arrowAngle}deg)`;
       }
     }
   }
@@ -665,6 +727,19 @@ makeFloatingDraggable(orientationModeBtn, "mapOrientationBtnPos", () => {
 });
 
 // ===== 現在地マーカーのアイコン生成（形状：矢印／丸／自転車／ピンから選択可能） =====
+// SVGで描く➡型の太矢印（進行方向が分かりやすいように先端が太く、胴が細い形状）
+// 上が進行方向。rotate()で実際の方向に合わせて回転させる。
+function buildArrowSvgHtml(size, color) {
+  const c = color || "var(--marker-color)";
+  const s = size || 32;
+  // viewBox="-16 -16 32 32" で中心を(0,0)に設定。
+  // 先端が上(y=-16)を向く矢印型パス
+  return `<svg viewBox="-16 -16 32 32" width="${s}" height="${s}" xmlns="http://www.w3.org/2000/svg" overflow="visible">
+    <path class="arrow-svg-outline" d="M0,-15 L10,8 L3,4 L3,14 L-3,14 L-3,4 L-10,8 Z" transform="scale(1.08)"/>
+    <path class="arrow-svg-body" d="M0,-15 L10,8 L3,4 L3,14 L-3,14 L-3,4 L-10,8 Z" fill="${c}"/>
+  </svg>`;
+}
+
 function buildCurrentMarkerIcon() {
   const shape = displaySettings.markerShape || "arrow";
   let html, size, anchor;
@@ -678,8 +753,8 @@ function buildCurrentMarkerIcon() {
     html = '<div class="current-location-emoji">📍</div>';
     size = [26, 26]; anchor = [13, 24];
   } else {
-    html = '<div class="current-location-arrow-outer"><div class="arrow-shape"></div></div>';
-    size = [26, 26]; anchor = [13, 13];
+    html = `<div class="current-location-arrow-outer">${buildArrowSvgHtml(32)}</div>`;
+    size = [32, 32]; anchor = [16, 16];
   }
   return L.divIcon({ className: "current-location-wrapper", html, iconSize: size, iconAnchor: anchor });
 }
@@ -736,7 +811,7 @@ function updatePaceDisplay(latitude, longitude) {
     remainKm = Math.max(0, targetDistance - (lastMatchedDist || 0));
   } catch (e) {}
 
-  // ヘッダー更新
+  // ヘッダー更新（1段目）
   headerGross.innerText = grossKph !== null ? `G:${grossKph.toFixed(1)}km/h` : "G:--";
   headerRemain.innerText = remainKm !== null ? `残${remainKm.toFixed(1)}km` : "残--km";
 
@@ -744,6 +819,46 @@ function updatePaceDisplay(latitude, longitude) {
   widgetSpeed.innerHTML = instantSpeedKph !== null ? `${instantSpeedKph.toFixed(1)} <span class="speed-unit">km/h</span>` : `-- <span class="speed-unit">km/h</span>`;
   widgetGross.innerHTML = grossKph !== null ? `${grossKph.toFixed(1)} <span class="speed-unit">km/h</span>` : `-- <span class="speed-unit">km/h</span>`;
   widgetRemain.innerHTML = remainKm !== null ? `${remainKm.toFixed(1)} <span class="speed-unit">km</span>` : `-- <span class="speed-unit">km</span>`;
+
+  // ヘッダー2段目の各項目を更新（ON表示のものだけ値を計算）
+  if (hdr2SpeedToggle.checked) {
+    hdr2SpeedVal.innerText = instantSpeedKph !== null ? instantSpeedKph.toFixed(1) : "--";
+  }
+  try {
+    const startTimeStr = localStorage.getItem("startTime");
+    const brmVal2 = localStorage.getItem("brm") || "200,13.5";
+    const [targetDist2, limitHour2] = brmVal2.split(",").map(Number);
+    if (startTimeStr) {
+      const start = new Date(startTimeStr);
+      const elapsedMs = now - start.getTime();
+      const elapsedHr = elapsedMs / 3600000;
+
+      if (hdr2ElapsedToggle.checked) {
+        const eh = Math.floor(elapsedHr), em = Math.floor((elapsedHr % 1) * 60);
+        hdr2ElapsedVal.innerText = elapsedHr >= 0 ? `${eh}h${String(em).padStart(2,"0")}m` : "--";
+      }
+      if (hdr2RemainTimeToggle.checked) {
+        const remainHr = limitHour2 - elapsedHr;
+        if (remainHr >= 0) {
+          const rh = Math.floor(remainHr), rm = Math.floor((remainHr % 1) * 60);
+          hdr2RemainTimeVal.innerText = `${rh}h${String(rm).padStart(2,"0")}m`;
+        } else {
+          hdr2RemainTimeVal.innerText = "超過";
+        }
+      }
+      if (hdr2NeedToggle.checked) {
+        const remKm2 = Math.max(0, targetDist2 - (lastMatchedDist || 0));
+        const remHr = limitHour2 - elapsedHr;
+        hdr2NeedVal.innerText = (remHr > 0 && remKm2 > 0) ? (remKm2 / remHr).toFixed(1) : "--";
+      }
+      if (hdr2SavingToggle.checked && grossKph !== null) {
+        const savingHr = limitHour2 - (targetDist2 / grossKph);
+        const sign = savingHr >= 0 ? "+" : "-";
+        const sh = Math.floor(Math.abs(savingHr)), sm = Math.floor((Math.abs(savingHr) % 1) * 60);
+        hdr2SavingVal.innerText = `${sign}${sh}h${String(sm).padStart(2,"0")}m`;
+      }
+    }
+  } catch (e) {}
 }
 
 function onGpsPosition(pos) {
@@ -839,6 +954,12 @@ function initMap() {
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   document.documentElement.style.setProperty("--route-arrow-color", displaySettings.routeColor);
   loadOffRouteSoundSetting();
+  initHdr2Items();
+  loadHdr2Settings();
+  applyHdr2Visibility();
+  setupHdr2Listeners();
+  const arrowPreview = document.querySelector(".shape-preview-arrow");
+  if (arrowPreview) arrowPreview.innerHTML = buildArrowSvgHtml(14);
   loadLayerSettings();
 
   // ウィジェットをフリー移動可能にする（ズーム・🧭・🎯と同じmakeFloatingDraggableを使用）
