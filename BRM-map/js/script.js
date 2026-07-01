@@ -528,9 +528,13 @@ function clampPosition(el, left, top) {
 // storageKey: 位置保存用のlocalStorageキー
 // onTap: 長押し(ドラッグ)に至らなかった通常タップ時に呼ぶコールバック（任意）
 function makeFloatingDraggable(el, storageKey, onTap) {
+  // 長押しで出るOSのコンテキストメニュー（コピー・共有など）を抑制する
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+
   function applyPos(left, top) {
     el.style.right = "auto";
     el.style.transform = "none";
+    el.style.bottom = "auto";
     el.style.left = left + "px";
     el.style.top = top + "px";
   }
