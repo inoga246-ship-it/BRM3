@@ -663,7 +663,8 @@ function renderGraphScale(targetDistance) {
 
   const startLabel = viewStart <= 0.01 ? "START" : viewStart.toFixed(1) + "km";
   const goalLabel = viewEnd >= targetDistance - 0.01 ? "GOAL" : viewEnd.toFixed(1) + "km";
-  createScalePoint(0, startLabel, "neutral-type", "10px", null); createScalePoint(100, goalLabel, "neutral-type", "10px", null);
+  createScalePoint(0, startLabel, "neutral-type start-label", "10px", null);
+  createScalePoint(100, goalLabel, "neutral-type goal-label", "10px", null);
   const midDist = (viewStart + viewEnd) / 2;
   createScalePoint(50, midDist.toFixed(1) + "km", "mid-type", "10px", null);
 
