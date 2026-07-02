@@ -2,177 +2,275 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>BRM Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BRM Pace Manager</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div class="container">
 
-<div id="mapOuter">
-  <div id="map"></div>
+  <div class="header">
+    <div class="header-logo-area">
+      <button class="map-mode-btn" id="mapModeBtn" title="地図モード（準備中）">🗺️</button>
+      <div class="header-title-block">
+        <span class="header-title-main">BRM PACE MANAGER</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="help-trigger" id="helpTrigger">❓</div>
+      <div class="menu-trigger" id="menuTrigger">☰</div>
+    </div>
+  </div>
+
+  <div class="menu-content" id="menuContent">
+    <div class="modal-content" style="border-color: #ffffff; box-shadow: 0 0 25px rgba(255, 255, 255, 0.15);">
+      <div class="modal-header">
+        <div class="modal-title" style="color: #ffffff; text-shadow: 0 0 6px rgba(255, 255, 255, 0.4);">⚙️ 設定メニュー</div>
+        <button class="modal-close-btn" id="menuCloseBtn">閉じる</button>
+      </div>
+      <div class="modal-body">
+        <div class="menu-top-row">
+          <div class="card-center half">
+            <label class="label-center" style="color: #fff;">BRM設定</label>
+            <select id="brm">
+              <option value="200,13.5">200km (13.5h)</option>
+              <option value="300,20">300km (20h)</option>
+              <option value="400,27">400km (27h)</option>
+              <option value="600,40">600km (40h)</option>
+            </select>
+          </div>
+          <div class="card-center half">
+            <label class="label-center" style="color: #fff;">START日時</label>
+            <input type="datetime-local" id="startTime">
+          </div>
+        </div>
+
+        <div class="menu-section-block">
+          <div class="label-toggle-wrapper" style="gap: 8px;">
+            <div style="flex: 1;">
+              <button type="button" class="btn-save" id="gpxBtn" style="width: 100%; background: #2563eb; box-shadow: 0 2px 6px rgba(37,99,235,0.3); padding: 6px 4px; font-size: 12px;">🗺️ GPX読み込み</button>
+              <input type="file" id="gpxFileInput" accept=".gpx" style="display:none;">
+            </div>
+            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center; border-left: 1px solid #334155; padding-left: 8px;">
+              <label class="menu-label-inline" style="color: #00ffaa; font-size: 11px;">🏪 コンビニ検索<br>の有効化</label>
+              <label class="switch">
+                <input type="checkbox" id="convenienceBtnToggle" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-section-block">
+          <div class="label-toggle-wrapper">
+            <label class="menu-label-inline" style="color: #00d2ff;">① 公式PC・通過チェック リスト登録</label>
+            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+              <span style="font-size: 11px; color: #94a3b8;">Wクリック地図連動</span>
+              <label class="switch">
+                <input type="checkbox" id="mapDblClickToggle" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+          <textarea id="pcInput" placeholder="例:
+PC1, 御幸橋, 24.9km
+PC2, 山城大橋, 68.0km"></textarea>
+        </div>
+
+        <div class="menu-section-block" id="menuShopInputWrapper">
+          <div class="label-toggle-wrapper">
+            <label class="menu-label-inline" style="color: #00ffaa;">② コンビニ・休憩・任意スポット 表示有効化</label>
+            <label class="switch">
+              <input type="checkbox" id="shopToggle" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <textarea id="shopInput" placeholder="例:
+ローソン 八幡南店, 32.1
+セブン 宇治川店, 50.4"></textarea>
+        </div>
+
+        <div style="margin-bottom: 8px;">
+          <label class="menu-label">現在のリスト一式を保存する</label>
+          <div class="menu-input-row">
+            <input type="text" id="saveName" placeholder="例: BRM315泉佐野" style="font-size:13px; padding:5px; text-align:left;">
+            <button class="btn-save" id="saveBtn">保存</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          <label class="menu-label">保存済みリストの呼び出し / 削除</label>
+          <div class="menu-input-row">
+            <select id="savedListsSelect" style="font-size:13px; padding:5px; text-align:left; text-align-last:left;">
+              <option value="">-- 保存データがありません --</option>
+            </select>
+            <button class="btn-delete" id="deleteBtn">削除</button>
+          </div>
+        </div>
+
+        <div class="menu-input-row" style="margin-top: 6px;">
+          <button class="btn-save" id="exportBtn" style="flex:1;">📤 バックアップ書き出し</button>
+          <button class="btn-save" id="importBtn" style="flex:1; background:#334155;">📥 バックアップ読み込み</button>
+        </div>
+        <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+
+        <button class="btn-reset" id="resetBtn">リセット</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">📖 アプリ使用マニュアル</div>
+        <button class="modal-close-btn" id="modalCloseBtn">閉じる</button>
+      </div>
+      <div class="modal-body">
+        <h4>1. 事前準備 (☰ メメニュー)</h4>
+        <ul>
+          <li><strong>🗺️ GPX読み込み:</strong> Ride with RWGPS等で作ったGPX（チェックポイント情報付き）を読み込ませると、①公式リスト・距離・獲得標高がすべて自動計算されて一括セットされます。詳しい使い方は次の「2. GPX読み込みについて」をご覧ください。</li>
+          <li><strong>BRM設定:</strong> 距離と制限時間枠を選びます。</li>
+          <li><strong>START日時:</strong> 出発時刻を正確に入力します。</li>
+          <li><strong>① 公式PCリスト:</strong> 「PC1, 地点名, 距離km」で改行入力。</li>
+          <li><strong>② 休憩スポット:</strong> 「店舗名, 距離」で改行入力します。</li>
+          <li><strong>🏪検索ボタン設定:</strong> 最上段のワンタップコンビニ検索ボタンのオンオフを設定できます。</li>
+        </ul>
+
+        <h4>2. GPX読み込みについて</h4>
+        <ul>
+          <li><strong>対応ファイル:</strong> 拡張子<strong>.gpx</strong>のファイルに対応しています（RWGPS、Ride with GPS、Garminコネクト等からエクスポートしたファイルなど）。</li>
+          <li><strong>読み込み方法:</strong> ☰メニュー内の「🗺️ GPX読み込み」ボタンをタップし、端末に保存されているGPXファイルを選択します。</li>
+          <li><strong>自動で取得される情報:</strong>
+            <ul>
+              <li>ルート全体の距離・獲得標高（トラック線=trkptデータから自動計算）</li>
+              <li>各PC（チェックポイント）・休憩スポットの位置と距離（ウェイポイント=wptデータから自動計算）</li>
+              <li>START/GOAL/進捗バー背面の<strong>簡易工程図（標高プロファイル）</strong>の描画データ</li>
+            </ul>
+          </li>
+          <li><strong>ウェイポイントの名前の付け方:</strong> GPX内のウェイポイント名に <code>PC</code> <code>チェック</code> <code>check</code> <code>start</code> <code>goal</code> <code>finish</code> <code>通過</code> のいずれかが含まれていると、自動的に「①公式PCリスト」側へ分類されます。それ以外の名前は「②休憩スポット」側（コンビニ等）として分類されます。</li>
+          <li><strong>BRM距離枠の自動選択:</strong> ルート総距離に応じて、200/300/400/600kmの設定が自動的に選ばれます（手動で変更も可能です）。</li>
+          <li><strong>注意点:</strong>
+            <ul>
+              <li>GPXに標高（ele）データが含まれていない場合、獲得標高は0mとして扱われ、簡易工程図も表示されません。</li>
+              <li>読み込み後も①②のリストは通常のテキスト編集と同様に手動で書き換え・追記が可能です。</li>
+              <li>読み込んだGPXデータは端末内に保存され、次回起動時も保持されます（☰メニューの「リセット」または「バックアップ読み込み」で消去・上書きされます）。</li>
+            </ul>
+          </li>
+        </ul>
+
+        <h4>3. 基本操作</h4>
+        <ul>
+          <li><strong>現在距離の更新:</strong> サイコンの積算距離を入力。</li>
+          <li><strong>📍 GPS距離取得（ワンショット）:</strong> 現在距離欄の横にある📍ボタンをタップすると、その瞬間のGPS位置を1回だけ取得し、GPXルート上の距離に変換して現在距離欄へ反映します（GPX読み込み済みの場合のみ使用可能）。常時GPSを監視する方式ではないため、電池消耗を抑えられます。直前に入力されていた距離の前後8km以内を優先的に探索するため、往復ルートのような同じ場所を2度通る区間でも、往路・復路を取り違えにくくなっています。取得中はボタンが黄色く点滅し、コースから300m以上外れている場合や取得に失敗した場合は赤く点滅して通知します。あくまで補助的な機能のため、随時タップして使う・距離欄に手入力するという使い分けを想定しています。</li>
+          <li><strong>目標ペース設計:</strong> PC枠内の15〜20km/h各グロス速度に応じた到着予想時刻を目安に走ります。</li>
+          <li><strong>🏪 ボタン:</strong> 走行中、現在地周辺の最寄りコンビニをマップアプリでワンタップ検索します。</li>
+        </ul>
+
+        <h4>4. ナビゲーションとマップ連動</h4>
+        <ul>
+          <li><strong>先行プレビュー:</strong> 各カード of <code>◀ 前</code> <code>次 ▶</code> ボタンで、距離に関係なく先々の地点を自由に確認可能。</li>
+          <li><strong>自動追従へ復帰:</strong> プレビュー中に中央の黄色の距離表示（<code>残り~km</code>）を<strong>ダブルクリック</strong>すると、現在地ベースの「次のスポット」に一発復帰します（拡大表示中の場合は全体表示にも戻ります）。</li>
+          <li><strong>マップ検索:</strong> 各カードの「地点名エリア」を<strong>ダブルクリック</strong>すると、その場所をマップで即座に検索できます（メニュー内連動ON時のみ）。</li>
+          <li><strong>進捗バーの拡大表示:</strong> START/GOALグラフ内の進捗バー（緑のバー部分）を<strong>タップ</strong>すると、「全体表示 → 現在地の2km手前〜38km先（計40km） → 現在地の2km手前〜18km先（計20km） → 全体表示…」の3段階で拡大表示を切り替えられます。現在距離を更新した場合は自動的に全体表示に戻ります。</li>
+          <li><strong>拡大表示中の横スライド:</strong> 拡大表示中に進捗バー周辺を<strong>押さえながら左右にスライド</strong>すると、表示範囲をそのまま前後にずらして先の情報や通過済みの情報を確認できます（左にスライドでGOAL方向、右にスライドでSTART方向）。</li>
+        </ul>
+
+        <h4>5. 表示のカスタマイズ</h4>
+        <ul>
+          <li>メニュー内の「② コンビニ…」右側のトグルをOFFにすると、休憩枠が隠れ、残ったPC情報や最下段の<strong>「貯金時間」が自動で大きく拡大表示</strong>され、夜間も見やすくなります。</li>
+        </ul>
+
+        <h4>6. 各種ステータス</h4>
+        <ul>
+          <li><strong>必要平均:</strong> 制限時間内にゴールする最低グロス速度。15km/hに近づくと危険です。</li>
+          <li><strong>貯金時間:</strong> 制限時間に対する現在のアドバンテージ。
+            <br><span class="green">🟢 2時間以上</span> / <span class="yellow">🟡 1時間以上</span> / <span class="red">🔴 1時間未満（危険）</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="top-row-grid" id="topRowGrid">
+    <div class="slim-card" id="distanceCard">
+      <div class="title">現在距離</div>
+      <div class="distance-input-row">
+        <input type="number" id="distance" step="0.1" inputmode="decimal" style="font-size:25px; color:#00ff66; padding: 2px; text-align: center; background: transparent; font-weight: bold; text-shadow: 0 0 6px rgba(0,255,102,0.3); border:none; flex:1; min-width:0;">
+        <button type="button" id="gpsTrackBtn" title="GPSで現在距離を自動取得">📍</button>
+      </div>
+    </div>
+    <div class="slim-card" id="timeCard">
+      <div class="title">現在時間</div>
+      <div id="currentTime" class="current-time-display">--:--:--</div>
+    </div>
+    <div id="convenienceBtnWrapper">
+      <button type="button" class="btn-convenience" id="convenienceBtn">🏪</button>
+    </div>
+  </div>
+
+  <div class="progress-section">
+    <div class="graph-scale-container" id="graphScale">
+      <svg id="elevationSvg" class="elevation-svg" viewBox="0 0 1000 100" preserveAspectRatio="none"></svg>
+      <div class="graph-container" id="progressBarTrack">
+        <div id="graphBar" class="graph-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card full-width-pc-card" id="pcCard">
+    <div class="pc-top-nav-row">
+      <button class="pc-nav-btn" id="pcPrevBtn">◀ 前</button>
+      <div class="pc-distance-display" id="pcRemainDist">残り -- km<span class="ele-small">（獲得標高 --m）</span></div>
+      <button class="pc-nav-btn" id="pcNextBtn">次 ▶</button>
+    </div>
+    
+    <div class="pc-bottom-title-row" id="pcTitleRow">
+      <div id="pcLabel" class="pc-title-label">次: PC-</div>
+    </div>
+    
+    <div class="speed-grid">
+      <div class="speed-cell"><div class="pc-speed-th">15km/h</div><div class="speed-td" id="pc_sp15">--:--</div></div>
+      <div class="speed-cell"><div class="pc-speed-th">16km/h</div><div class="speed-td" id="pc_sp16">--:--</div></div>
+      <div class="speed-cell"><div class="pc-speed-th">17km/h</div><div class="speed-td" id="pc_sp17">--:--</div></div>
+      <div class="speed-cell"><div class="pc-speed-th">18km/h</div><div class="speed-td" id="pc_sp18">--:--</div></div>
+      <div class="speed-cell"><div class="pc-speed-th">19km/h</div><div class="speed-td" id="pc_sp19">--:--</div></div>
+      <div class="speed-cell"><div class="pc-speed-th">20km/h</div><div class="speed-td" id="pc_sp20">--:--</div></div>
+    </div>
+  </div>
+
+  <div class="card full-width-shop-card" id="shopCard">
+    <div class="shop-top-nav-row">
+      <button class="shop-nav-btn" id="shopPrevBtn">◀ 前</button>
+      <div class="shop-distance-display" id="shopRemainDist">残り -- km<span class="ele-small">（獲得標高 --m）</span></div>
+      <button class="shop-nav-btn" id="shopNextBtn">次 ▶</button>
+    </div>
+    
+    <div class="shop-bottom-title-row" id="shopTitleRow">
+      <div id="shopLabel" class="shop-title-label">次休憩: ---</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="slim-card"><div class="title">経過時間</div><div class="value" id="elapsed">--</div></div>
+    <div class="slim-card"><div class="title">残り時間</div><div class="value" id="remainTime">--</div></div>
+    <div class="slim-card"><div class="title">グロス速度</div><div class="value" id="gross">--</div></div>
+    <div class="slim-card"><div class="title">残り距離</div><div class="value" id="remainDistance">--</div></div>
+    <div class="slim-card"><div class="title">完走予想</div><div class="value" id="finish">--</div></div>
+    <div class="slim-card"><div class="title">必要平均</div><div class="value" id="needSpeed">--</div></div>
+  </div>
+
+  <div class="slim-big-card">
+    <div class="title" style="font-size: 13px;">貯金時間</div>
+    <div class="big-value" id="saving">--</div>
+  </div>
+
+  <div class="footer">
+    © 2026 Developed by HIRAI
+  </div>
+
 </div>
 
-<div class="map-header">
-  <div class="map-header-row1">
-    <button id="backBtn" title="ペース管理に戻る">← 戻る</button>
-    <div class="header-pace-display">
-      <span id="headerGross" class="header-pace-value">--</span>
-      <span class="header-pace-sep">/</span>
-      <span id="headerRemain" class="header-pace-value">--</span>
-    </div>
-    <span id="statusText" class="map-status">GPS待機中…</span>
-    <button id="menuBtn" title="メニュー">☰</button>
-  </div>
-  <div class="map-header-row2" id="headerRow2">
-    <span class="hdr2-item" id="hdr2Speed" style="display:none;"><span class="hdr2-label">速度</span><span class="hdr2-value" id="hdr2SpeedVal">--</span><span class="hdr2-unit">km/h</span></span>
-    <span class="hdr2-sep hdr2-speed-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Elapsed" style="display:none;"><span class="hdr2-label">経過</span><span class="hdr2-value" id="hdr2ElapsedVal">--</span></span>
-    <span class="hdr2-sep hdr2-elapsed-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2RemainTime" style="display:none;"><span class="hdr2-label">残時間</span><span class="hdr2-value" id="hdr2RemainTimeVal">--</span></span>
-    <span class="hdr2-sep hdr2-remaintime-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Need" style="display:none;"><span class="hdr2-label">必要</span><span class="hdr2-value" id="hdr2NeedVal">--</span><span class="hdr2-unit">km/h</span></span>
-    <span class="hdr2-sep hdr2-need-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Saving" style="display:none;"><span class="hdr2-label">貯金</span><span class="hdr2-value" id="hdr2SavingVal">--</span></span>
-  </div>
-</div>
-
-<div id="orientationModeBtn" class="floating-icon-btn" title="地図の向き">🧭</div>
-<div id="recenterBtn" class="floating-icon-btn recenter-icon" title="現在地に戻る" style="display:none;">🎯</div>
-
-<div id="speedWidget" class="speed-widget">
-  <div class="speed-widget-row">
-    <span class="speed-widget-label">現在速度</span>
-    <span id="widgetSpeed" class="speed-widget-value">-- <span class="speed-unit">km/h</span></span>
-  </div>
-  <div class="speed-widget-row">
-    <span class="speed-widget-label">グロス</span>
-    <span id="widgetGross" class="speed-widget-value">-- <span class="speed-unit">km/h</span></span>
-  </div>
-  <div class="speed-widget-row">
-    <span class="speed-widget-label">残り</span>
-    <span id="widgetRemain" class="speed-widget-value">-- <span class="speed-unit">km</span></span>
-  </div>
-</div>
-
-<div class="center-zoom-controls">
-  <button id="zoomInBtn" title="拡大">＋</button>
-  <button id="zoomOutBtn" title="縮小">－</button>
-</div>
-
-<div id="mapMenuModal" class="map-menu-modal">
-  <div class="map-menu-content">
-    <div class="map-menu-header">
-      <span>メニュー</span>
-      <button id="menuCloseBtn">✕</button>
-    </div>
-    <button id="downloadAreaBtn" class="map-menu-item">💾 ルート周辺タイルを保存（事前ダウンロード）</button>
-    <p class="map-menu-note">Wi-Fi等の通信環境がある場所で実行してください。完了後はオフラインでも保存済みの範囲が地図表示に使えます。</p>
-
-    <div class="map-menu-section-title">ヘッダー2行目の表示項目</div>
-    <div class="map-menu-row">
-      <label for="hdr2SpeedToggle">🚀 現在速度</label>
-      <input type="checkbox" id="hdr2SpeedToggle">
-    </div>
-    <div class="map-menu-row">
-      <label for="hdr2ElapsedToggle">⏱ 経過時間</label>
-      <input type="checkbox" id="hdr2ElapsedToggle">
-    </div>
-    <div class="map-menu-row">
-      <label for="hdr2RemainTimeToggle">⏳ 残り時間</label>
-      <input type="checkbox" id="hdr2RemainTimeToggle">
-    </div>
-    <div class="map-menu-row">
-      <label for="hdr2NeedToggle">⚡ 必要平均速度</label>
-      <input type="checkbox" id="hdr2NeedToggle">
-    </div>
-    <div class="map-menu-row">
-      <label for="hdr2SavingToggle">💰 貯金時間</label>
-      <input type="checkbox" id="hdr2SavingToggle">
-    </div>
-
-    <div class="map-menu-section-title">地図の表示項目</div>
-    <div class="map-menu-row">
-      <label for="layerRouteToggle">🛣 ルート線</label>
-      <input type="checkbox" id="layerRouteToggle" checked>
-    </div>
-    <div class="map-menu-row">
-      <label for="layerArrowToggle">➡ 進行方向矢印</label>
-      <input type="checkbox" id="layerArrowToggle" checked>
-    </div>
-    <div class="map-menu-row">
-      <label for="layerPcToggle">🔵 PCチェックポイント</label>
-      <input type="checkbox" id="layerPcToggle" checked>
-    </div>
-    <div class="map-menu-row">
-      <label for="layerShopToggle">🏪 休憩スポット</label>
-      <input type="checkbox" id="layerShopToggle" checked>
-    </div>
-    <div class="map-menu-row">
-      <label for="layerSpeedWidgetToggle">📊 速度・残り距離ウィジェット</label>
-      <input type="checkbox" id="layerSpeedWidgetToggle" checked>
-    </div>
-
-    <div class="map-menu-section-title">表示設定</div>
-    <div class="map-menu-row">
-      <label>現在地マークの形</label>
-    </div>
-    <div class="marker-shape-grid">
-      <button type="button" class="marker-shape-option" data-shape="arrow" title="矢印（進行方向を表示）">
-        <span class="shape-preview shape-preview-arrow"></span>矢印
-      </button>
-      <button type="button" class="marker-shape-option" data-shape="circle" title="丸">
-        <span class="shape-preview shape-preview-circle"></span>丸
-      </button>
-      <button type="button" class="marker-shape-option" data-shape="bike" title="自転車">🚲 自転車</button>
-      <button type="button" class="marker-shape-option" data-shape="pin" title="ピン">📍 ピン</button>
-    </div>
-    <div class="map-menu-row">
-      <label for="markerColorInput">現在地マーカーの色<br><span class="map-menu-subnote">（矢印・丸の形のみ反映されます）</span></label>
-      <input type="color" id="markerColorInput" value="#00d2ff">
-    </div>
-    <div class="map-menu-row">
-      <label for="routeColorInput">ルート線の色</label>
-      <input type="color" id="routeColorInput" value="#ff8c00">
-    </div>
-    <div class="map-menu-row">
-      <label for="routeWidthInput">ルート線の太さ <span id="routeWidthValue">4</span>px</label>
-      <input type="range" id="routeWidthInput" min="1" max="10" step="1" value="4">
-    </div>
-    <div class="map-menu-row">
-      <label for="routeOpacityInput">ルート線の透過度 <span id="routeOpacityValue">85</span>%</label>
-      <input type="range" id="routeOpacityInput" min="10" max="100" step="5" value="85">
-    </div>
-    <button id="resetDisplaySettingsBtn" class="map-menu-item secondary">表示設定を初期値に戻す</button>
-
-    <div class="map-menu-section-title">通知設定</div>
-    <div class="map-menu-row">
-      <label for="offRouteSoundToggle">🔔 ルート逸脱時に音で通知</label>
-      <input type="checkbox" id="offRouteSoundToggle" checked>
-    </div>
-
-    <div class="map-menu-section-title">画面設定</div>
-    <div class="map-menu-row">
-      <label for="wakeLockToggle">🔒 走行中、画面を常にONにする</label>
-      <input type="checkbox" id="wakeLockToggle">
-    </div>
-    <button id="resetIconPositionsBtn" class="map-menu-item secondary">📍 地図上アイコンの位置を初期化</button>
-  </div>
-</div>
-
-<div id="downloadProgressOverlay" class="download-progress-overlay" style="display:none;">
-  <div class="download-progress-box">
-    <div class="download-progress-title">ルート周辺タイルをダウンロード中</div>
-    <div id="downloadProgressText" class="download-progress-text">0 / 0 タイル</div>
-    <div class="download-progress-track">
-      <div id="downloadProgressFill" class="download-progress-fill"></div>
-    </div>
-    <div class="download-progress-note">Wi-Fi環境のまま、画面をそのままにしてお待ちください。</div>
-    <button id="cancelDownloadBtn">中止する</button>
-  </div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="cordova.js"></script>
 <script src="js/script.js"></script>
 </body>
 </html>
