@@ -178,30 +178,42 @@ convenienceBtnToggle.addEventListener("change", () => {
 distance.addEventListener("focus", () => { tempDistanceValue = distance.value; distance.value = ""; });
 distance.addEventListener("blur", () => { if (distance.value === "") { distance.value = tempDistanceValue; update(false); } });
 
+// ネイティブの地図アプリを直接起動する。
+// iOSはApple Maps（maps://）、AndroidはGoogleマップアプリ（comgooglemaps://）のスキームURLを使う。
+// スキームURLはWebViewではなくOSが直接ネイティブアプリに渡すため、InAppBrowserを経由しない。
+// Monaca(Cordova)環境と通常ブラウザ環境の両方に対応する。
+function openNativeMap(url, fallbackUrl) {
+  // Cordova環境：InAppBrowserプラグインの_systemターゲットでOSに処理を委譲
+  if (window.cordova && window.cordova.InAppBrowser) {
+    window.cordova.InAppBrowser.open(url, "_system", "location=yes");
+  } else {
+    // 通常ブラウザ環境：location.hrefで遷移（スキームURLはブラウザが地図アプリに転送する）
+    window.location.href = url;
+  }
+}
+
 function searchOnGoogleMap(keyword) {
   if (!keyword || keyword.includes("ゴール") || keyword.includes("登録なし") || keyword.includes("---")) return;
-  const userAgent = navigator.userAgent.toLowerCase();
-  
-  let url = /iphone|ipad|ipod/.test(userAgent) 
-    ? "http://maps.apple.com/?q=" + encodeURIComponent(keyword) 
-    : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(keyword);
-    
-  if (window.cordova && window.cordova.InAppBrowser) { 
-    window.cordova.InAppBrowser.open(url, '_system'); 
-  } else { 
-    window.open(url, '_blank'); 
+  const ua = navigator.userAgent.toLowerCase();
+  const enc = encodeURIComponent(keyword);
+  if (/iphone|ipad|ipod/.test(ua)) {
+    // iOS：Apple Mapsアプリをスキームで直接起動
+    openNativeMap("maps://?q=" + enc);
+  } else {
+    // Android：GoogleマップアプリをIntentスキームで直接起動
+    // comgooglemaps:// がインストール済みなら開く。intent:// 経由でも可。
+    openNativeMap("comgooglemaps://?q=" + enc, "https://www.google.com/maps/search/?api=1&query=" + enc);
   }
 }
 
 function searchOnGoogleMapNearby(keyword, lat, lng) {
-  const userAgent = navigator.userAgent.toLowerCase();
-  let url;
-  if (/iphone|ipad|ipod/.test(userAgent)) {
-    url = "http://maps.apple.com/?q=" + encodeURIComponent(keyword) + "&sll=" + lat + "," + lng + "&z=15";
+  const ua = navigator.userAgent.toLowerCase();
+  const enc = encodeURIComponent(keyword);
+  if (/iphone|ipad|ipod/.test(ua)) {
+    openNativeMap(`maps://?q=${enc}&sll=${lat},${lng}&z=15`);
   } else {
-    url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(keyword + " 近く") + "&center=" + lat + "," + lng;
+    openNativeMap(`comgooglemaps://?q=${enc}&center=${lat},${lng}&zoom=15`);
   }
-  if (window.cordova && window.cordova.InAppBrowser) { window.cordova.InAppBrowser.open(url, '_system'); } else { window.open(url, '_blank'); }
 }
 
 convenienceBtn.addEventListener("click", () => {
@@ -465,6 +477,20 @@ function getGpxGainAtDistance(dist) {
   return gpxTrackPoints[gpxTrackPoints.length - 1].gain;
 }
 
+function getGpxElevationAtDistance(dist) {
+  if (gpxTrackPoints.length === 0) return null;
+  for (let i = 0; i < gpxTrackPoints.length; i++) {
+    if (gpxTrackPoints[i].dist >= dist) {
+      // 前後2点で線形補間してより正確な標高を返す
+      if (i === 0) return Math.round(gpxTrackPoints[0].ele);
+      const p0 = gpxTrackPoints[i - 1], p1 = gpxTrackPoints[i];
+      const t = (p1.dist > p0.dist) ? (dist - p0.dist) / (p1.dist - p0.dist) : 0;
+      return Math.round(p0.ele + (p1.ele - p0.ele) * t);
+    }
+  }
+  return Math.round(gpxTrackPoints[gpxTrackPoints.length - 1].ele);
+}
+
 function loadSavedListsDropdown() {
   const savedData = localStorage.getItem("customBRMDataSets3");
   let lists = savedData ? JSON.parse(savedData) : {};
@@ -635,12 +661,12 @@ function updateDisplayOnly() {
 // 現在のズーム段階・パンオフセットに応じた表示範囲[viewStart, viewEnd]を計算する
 function getViewRange(targetDistance) {
   if (zoomLevel === 0) return [0, targetDistance];
-  const maxEnd = Math.max(targetDistance, gpxTrackPoints.length > 0 ? gpxTrackPoints[gpxTrackPoints.length - 1].dist : targetDistance);
   const span = zoomBaseEnd - zoomBaseStart;
   let start = zoomBaseStart + zoomPanOffsetKm;
   let end = zoomBaseEnd + zoomPanOffsetKm;
+  // スタート以前・ゴール以降へのパンを無効にする
   if (start < 0) { end -= start; start = 0; }
-  if (end > maxEnd) { start -= (end - maxEnd); end = maxEnd; if (start < 0) start = 0; }
+  if (end > targetDistance) { start -= (end - targetDistance); end = targetDistance; if (start < 0) start = 0; }
   if (end <= start) end = start + 0.1;
   return [start, end];
 }
@@ -650,6 +676,17 @@ function renderGraphScale(targetDistance) {
 
   const [viewStart, viewEnd] = getViewRange(targetDistance);
   const viewSpan = viewEnd - viewStart;
+
+  // ラベルのフォントサイズ(11px)と1.25emのずれ量をpx換算し、グラフ幅に対する割合でCSS変数を設定する
+  // これにより標高SVG・進捗バーがSTART/GOALラベルの内側に収まる
+  const containerWidth = graphScale.getBoundingClientRect().width || 300;
+  const labelFontPx = 11; // .scale-point の font-size
+  const startOffsetPx = 1.25 * labelFontPx; // START: 1.25em左にずれ → グラフ左端はその分右に
+  const goalOffsetPx = 1.25 * labelFontPx;  // GOAL: 1.25em右にずれ → グラフ右端はその分左に
+  const graphLeftPct = (startOffsetPx / containerWidth) * 100;
+  const graphWidthPct = 100 - graphLeftPct - (goalOffsetPx / containerWidth) * 100;
+  graphScale.style.setProperty("--graph-left", graphLeftPct.toFixed(2) + "%");
+  graphScale.style.setProperty("--graph-width", graphWidthPct.toFixed(2) + "%");
 
   // 簡易工程図：ズーム中は表示範囲(viewStart〜viewEnd)、非ズーム時はGPXの実測距離全体を使って描画する
   if (zoomLevel !== 0) {
@@ -661,12 +698,24 @@ function renderGraphScale(targetDistance) {
 
   const items = graphScale.querySelectorAll(".scale-point"); items.forEach(el => el.remove());
 
+  // STARTラベル（左揃え・1.25em左にずれ）＋START地点の標高を上に表示
+  const startEle = getGpxElevationAtDistance(viewStart);
+  const startEleHtml = startEle !== null ? `<span class="neutral-ele">${startEle}m</span><br>` : "";
   const startLabel = viewStart <= 0.01 ? "START" : viewStart.toFixed(1) + "km";
+  createScalePoint(0, startEleHtml + startLabel, "neutral-type start-label", "2px", null);
+
+  // GOALラベル（右揃え・1.25em右にずれ）
   const goalLabel = viewEnd >= targetDistance - 0.01 ? "GOAL" : viewEnd.toFixed(1) + "km";
-  createScalePoint(0, startLabel, "neutral-type start-label", "10px", null);
   createScalePoint(100, goalLabel, "neutral-type goal-label", "10px", null);
+
+  // 中間ポイントは表示範囲の中間地点（距離＋標高を表示）
   const midDist = (viewStart + viewEnd) / 2;
-  createScalePoint(50, midDist.toFixed(1) + "km", "mid-type", "10px", null);
+  if (midDist > viewStart + 0.5 && midDist < viewEnd - 0.5) {
+    const midPct = ((midDist - viewStart) / viewSpan) * 100;
+    const midEle = getGpxElevationAtDistance(midDist);
+    const midEleHtml = midEle !== null ? `<span class="mid-ele">${midEle}m</span><br>` : "";
+    createScalePoint(midPct, midEleHtml + midDist.toFixed(1) + "km", "mid-type", "2px", null);
+  }
 
   let lastPctPC = -999; let useUpperRowPC = false;
   globalPCList.forEach((p, idx) => {
@@ -691,7 +740,7 @@ function renderGraphScale(targetDistance) {
 }
 
 function createScalePoint(leftPct, label, className, topStyle, bottomStyle) {
-  const div = document.createElement("div"); div.className = "scale-point " + className; div.style.left = leftPct + "%"; div.innerText = label;
+  const div = document.createElement("div"); div.className = "scale-point " + className; div.style.left = leftPct + "%"; div.innerHTML = label;
   if (topStyle !== null) div.style.top = topStyle; if (bottomStyle !== null) div.style.bottom = bottomStyle; graphScale.appendChild(div);
 }
 

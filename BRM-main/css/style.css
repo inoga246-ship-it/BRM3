@@ -433,11 +433,11 @@ input[type="datetime-local"] {
   background-color: #1e293b;
   border-radius: 4px;
   height: 10px; 
-  width: 100%;
+  width: var(--graph-width, 90%);
   overflow: hidden;
   position: absolute;
   top: 27px; 
-  left: 0;
+  left: var(--graph-left, 5%);
   z-index: 1;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
   cursor: pointer;
@@ -452,11 +452,12 @@ input[type="datetime-local"] {
 }
 
 /* 簡易工程図（GPX標高プロファイル）：START/GOALの枠内に背面として全面表示 */
+/* --graph-left と --graph-width で START/GOAL ラベルの内側に収まるよう調整する（JS側からsetPropertyで設定） */
 .elevation-svg {
   position: absolute;
   top: 0;
-  left: 0;
-  width: 100%;
+  left: var(--graph-left, 5%);
+  width: var(--graph-width, 90%);
   height: 100%;
   z-index: 2;
   pointer-events: none;
@@ -541,11 +542,30 @@ input[type="datetime-local"] {
 
 .scale-point.neutral-type { top: 10px; color: #ffffff; }
 .scale-point.neutral-type::after { top: 13px; height: 14px; }
-.scale-point.neutral-type.start-label { transform: translateX(calc(-50% + 2.5em)); }
-.scale-point.neutral-type.goal-label  { transform: translateX(calc(-50% - 1.25em)); }
-
-.scale-point.mid-type { top: 10px; color: rgba(255, 255, 255, 0.45); font-size: 11px; font-weight: normal; cursor: default; }
-.scale-point.mid-type::after { top: 13px; height: 14px; opacity: 0.25; }
+/* STARTは1.25em左にずらして左揃え */
+.scale-point.neutral-type.start-label {
+  transform: translateX(calc(-50% - 1.25em));
+  text-align: left;
+  top: 2px;
+  line-height: 1.3;
+}
+/* GOALは1.25em右にずらして右揃え */
+.scale-point.neutral-type.goal-label {
+  transform: translateX(calc(-50% + 1.25em));
+  text-align: right;
+}
+/* START地点の標高（白色・距離の上に配置） */
+.neutral-ele {
+  display: block;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: normal;
+  line-height: 1.2;
+}
+.scale-point.mid-type { top: 2px; color: #ffffff; font-size: 10px; font-weight: normal; cursor: default; line-height: 1.3; text-align: center; }
+.scale-point.mid-type::after { top: 28px; height: 14px; opacity: 0.25; }
+/* 5km地点の標高（mid-typeと同色） */
+.mid-ele { display: block; font-size: 10px; color: #ffffff; line-height: 1.2; }
 
 /* ① PC専用情報枠 */
 .full-width-pc-card {
