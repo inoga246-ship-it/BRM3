@@ -178,37 +178,39 @@ convenienceBtnToggle.addEventListener("change", () => {
 distance.addEventListener("focus", () => { tempDistanceValue = distance.value; distance.value = ""; });
 distance.addEventListener("blur", () => { if (distance.value === "") { distance.value = tempDistanceValue; update(false); } });
 
-// ネイティブの地図アプリを直接起動する。
-// iOSはApple Maps（maps://）、AndroidはGoogleマップアプリ（comgooglemaps://）のスキームURLを使う。
-// スキームURLはWebViewではなくOSが直接ネイティブアプリに渡すため、InAppBrowserを経由しない。
-// Monaca(Cordova)環境と通常ブラウザ環境の両方に対応する。
-function openNativeMap(url, fallbackUrl) {
-  // Cordova環境：InAppBrowserプラグインの_systemターゲットでOSに処理を委譲
-  if (window.cordova && window.cordova.InAppBrowser) {
-    window.cordova.InAppBrowser.open(url, "_system", "location=yes");
-  } else {
-    // 通常ブラウザ環境：location.hrefで遷移（スキームURLはブラウザが地図アプリに転送する）
-    window.location.href = url;
+// ===== 地図アプリの起動 =====
+// 優先順位：①Cordova InAppBrowser(_system) → ②スキームURL直接 → ③location.href
+// _systemターゲットはOSのデフォルト処理（地図アプリを直接起動）に委ねる。
+function openNativeMap(url) {
+  // Cordova(Monaca)環境
+  if (window.cordova) {
+    // InAppBrowserプラグインが有効な場合
+    const iab = window.cordova.InAppBrowser || (window.cordova.plugins && window.cordova.plugins.inAppBrowser);
+    if (iab) {
+      iab.open(url, "_system", "");
+      return;
+    }
   }
+  // 非Cordova環境、またはInAppBrowserが無い場合はlocation.hrefで直接遷移
+  window.location.href = url;
 }
 
 function searchOnGoogleMap(keyword) {
   if (!keyword || keyword.includes("ゴール") || keyword.includes("登録なし") || keyword.includes("---")) return;
-  const ua = navigator.userAgent.toLowerCase();
   const enc = encodeURIComponent(keyword);
+  const ua = navigator.userAgent.toLowerCase();
   if (/iphone|ipad|ipod/.test(ua)) {
-    // iOS：Apple Mapsアプリをスキームで直接起動
+    // iOS：Apple Maps
     openNativeMap("maps://?q=" + enc);
   } else {
-    // Android：GoogleマップアプリをIntentスキームで直接起動
-    // comgooglemaps:// がインストール済みなら開く。intent:// 経由でも可。
-    openNativeMap("comgooglemaps://?q=" + enc, "https://www.google.com/maps/search/?api=1&query=" + enc);
+    // Android：Googleマップアプリ（comgooglemaps://）→インストール済みならアプリで開く
+    openNativeMap("comgooglemaps://?q=" + enc);
   }
 }
 
 function searchOnGoogleMapNearby(keyword, lat, lng) {
-  const ua = navigator.userAgent.toLowerCase();
   const enc = encodeURIComponent(keyword);
+  const ua = navigator.userAgent.toLowerCase();
   if (/iphone|ipad|ipod/.test(ua)) {
     openNativeMap(`maps://?q=${enc}&sll=${lat},${lng}&z=15`);
   } else {
