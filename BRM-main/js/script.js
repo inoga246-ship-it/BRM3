@@ -853,8 +853,22 @@ function update(isDistanceOrInputChanged = false) {
   for (let i = 0; i < globalShopList.length; i++) { if (globalShopList[i].dist > currentDist) { detectedShopIdx = i; break; } }
   shopAutoTrackIdx = detectedShopIdx; if (isDistanceOrInputChanged || !isShopUserNavigating || shopDisplayIdx === -1 || shopDisplayIdx >= globalShopList.length) { if (isDistanceOrInputChanged) isShopUserNavigating = false; shopDisplayIdx = shopAutoTrackIdx; }
 
-  renderGraphScale(targetDistance); updateDisplayOnly();
-  if (!startTime.value) return; let start = new Date(startTime.value);
+renderGraphScale(targetDistance); updateDisplayOnly();
+
+  // 1. そもそも入力欄があるか、値が入っているかチェック
+  if (!startTime || !startTime.value) {
+    return; 
+  }
+
+  // 2. スマホ（iOS等）でのパースエラーを防ぐため、文字列を安全な形式（ハイフンをスラッシュに置換など）に整形
+  let dateStr = startTime.value.trim().replace(/-/g, '/').replace('T', ' ');
+  let start = new Date(dateStr);
+
+  // 3. それでも変換に失敗した場合の保険（エラーで画面が完全にフリーズするのを防ぐ）
+  if (isNaN(start.getTime())) {
+    console.error("START日時の解析に失敗しました: ", startTime.value);
+    return;
+  }
   if (isNaN(start.getTime())) return;
   if (now < start) {
     document.getElementById("elapsed").innerText = "スタート前"; document.getElementById("remainTime").innerText = "スタート前"; document.getElementById("gross").innerText = "--";
