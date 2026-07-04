@@ -3,7 +3,7 @@ const TILE_SUBDOMAINS = ["a", "b", "c"];
 const TILE_CACHE_NAME = "brm-map-tiles-v1";
 const DOWNLOAD_ZOOM_LEVELS = [13, 14, 15, 16]; // ダウンロード対象のズームレベル
 const ROUTE_BUFFER_TILES = 1; // ルート沿いの各タイルの周囲(隣接タイル数)もまとめてダウンロード
-const DOWNLOAD_CONCURRENCY = 8; // 同時ダウンロード数（速度と負荷のバランス）
+const DOWNLOAD_CONCURRENCY = 4; // 同時ダウンロード数（速度と負荷のバランス）
 const GPS_SEARCH_WINDOW_KM = 8;   // 直前にマッチした距離から±この範囲内のみを探索（往復ルートの取り違え防止）
 const GPS_MAX_MATCH_DIST_KM = 0.3; // 最も近い点でも300m以上離れている場合は信頼しない
 
@@ -268,7 +268,7 @@ function renderRouteDirectionArrows() {
   // 現在のズームレベルから「画面に映るおおよその距離(km)」を算出する
   // Leafletのズームレベルは1段階ごとに縮尺が2倍になる。zoom13≒画面幅10km前後を基準に計算。
   const zoom = map.getZoom();
-  // zoom13で画面幅約10km、1段階上がるごとに半分になる
+  // zoom16で画面幅約0.6km程度を基準に計算（zoom13≒10km、1段階ごとに1/2）
   const approxScreenWidthKm = 10 * Math.pow(2, 13 - zoom);
   // 画面内に3〜4本表示されるよう間隔を設定
   const spacingKm = Math.max(0.05, approxScreenWidthKm / 3.5);
@@ -797,14 +797,20 @@ function buildCurrentMarkerIcon() {
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 // FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
-const FOLLOW_OFFSET_RATIO = 0.16;
+const FOLLOW_OFFSET_RATIO = 0.28;
 
 function getOffsetCenter(latlng) {
-  // 地図のピクセル高さを取得し、オフセット分だけ上側にpanしてマーカーが下寄りになるよう調整する
   const mapSize = map.getSize();
   const offsetPx = Math.round(mapSize.y * FOLLOW_OFFSET_RATIO);
   const markerPoint = map.latLngToContainerPoint(latlng);
-  const targetPoint = markerPoint.subtract([0, offsetPx]);
+
+  // heading-upモード（地図が回転中）の場合、オフセット方向を回転角に合わせて補正する
+  // 地図がθ度回転している時、「画面上の下方向」はLeafletの内部座標では(-sinθ, -cosθ)方向になる
+  const angleDeg = mapOrientationMode === "heading" ? -currentRotationDeg : 0;
+  const rad = angleDeg * Math.PI / 180;
+  const dx = Math.round(offsetPx * Math.sin(rad));
+  const dy = Math.round(offsetPx * Math.cos(rad));
+  const targetPoint = markerPoint.subtract([dx, dy]);
   return map.containerPointToLatLng(targetPoint);
 }
 
@@ -1014,7 +1020,7 @@ function initMap() {
   loadLayerSettings();
   restoreFloatingIconPositions();
 
-  map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 13);
+  map = L.map("map", { zoomControl: false, attributionControl: true }).setView([35.681, 139.767], 16);
   const offlineLayer = new OfflineTileLayer({
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
