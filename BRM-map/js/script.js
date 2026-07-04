@@ -796,6 +796,18 @@ function buildCurrentMarkerIcon() {
 }
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
+// FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
+const FOLLOW_OFFSET_RATIO = 0.28;
+
+function getOffsetCenter(latlng) {
+  // 地図のピクセル高さを取得し、オフセット分だけ上側にpanしてマーカーが下寄りになるよう調整する
+  const mapSize = map.getSize();
+  const offsetPx = Math.round(mapSize.y * FOLLOW_OFFSET_RATIO);
+  const markerPoint = map.latLngToContainerPoint(latlng);
+  const targetPoint = markerPoint.subtract([0, offsetPx]);
+  return map.containerPointToLatLng(targetPoint);
+}
+
 function updateCurrentMarker(lat, lon, headingDeg) {
   const latlng = [lat, lon];
   if (!currentMarker) {
@@ -803,16 +815,20 @@ function updateCurrentMarker(lat, lon, headingDeg) {
   } else {
     currentMarker.setLatLng(latlng);
   }
-  if (followMode) map.setView(latlng, map.getZoom(), { animate: true });
+  if (followMode) {
+    // 現在地が画面の下寄り（中央から28%下）に来るよう地図中心をオフセットして追従する
+    const center = getOffsetCenter(latlng);
+    map.setView(center, map.getZoom(), { animate: true });
+  }
 
   if (mapOrientationMode === "heading") {
     if (headingDeg !== null && !isNaN(headingDeg)) {
-      applyMapRotation(headingDeg); // 地図をheading分逆回転（進行方向が上）
+      applyMapRotation(headingDeg);
     } else {
-      applyMapRotation(null); // heading不明なら現状維持
+      applyMapRotation(null);
     }
   } else {
-    applyMapRotation(headingDeg); // 北が上：矢印だけheading方向に向ける
+    applyMapRotation(headingDeg);
   }
 }
 
@@ -976,7 +992,10 @@ backBtn.addEventListener("click", () => {
 
 makeFloatingDraggable(recenterBtn, "mapRecenterBtnPos", () => {
   setFollowMode(true);
-  if (currentMarker) map.setView(currentMarker.getLatLng(), map.getZoom(), { animate: true });
+  if (currentMarker) {
+    const center = getOffsetCenter(currentMarker.getLatLng());
+    map.setView(center, map.getZoom(), { animate: true });
+  }
 });
 
 // ===== 初期化 =====
