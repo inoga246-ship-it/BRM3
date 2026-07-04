@@ -797,7 +797,7 @@ function buildCurrentMarkerIcon() {
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 // FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
-const FOLLOW_OFFSET_RATIO = 0.40;
+const FOLLOW_OFFSET_RATIO = 0.2;
 
 function getOffsetCenter(latlng) {
   // 地図のピクセル高さを取得し、オフセット分だけ上側にpanしてマーカーが下寄りになるよう調整する
