@@ -561,7 +561,7 @@ input[type="datetime-local"] {
 }
 .scale-point.neutral-type.goal-label::after { top: 26px; height: 0; }
 
-/* START地点の標高（白色・距離の上に配置） */
+/* START・GOAL地点の標高（白色・距離の上に配置） */
 .neutral-ele {
   display: block;
   font-size: 10px;
