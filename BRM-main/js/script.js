@@ -677,16 +677,10 @@ function renderGraphScale(targetDistance) {
   const [viewStart, viewEnd] = getViewRange(targetDistance);
   const viewSpan = viewEnd - viewStart;
 
-  // ラベルのフォントサイズ(11px)と1.25emのずれ量をpx換算し、グラフ幅に対する割合でCSS変数を設定する
-  // これにより標高SVG・進捗バーがSTART/GOALラベルの内側に収まる
-  const containerWidth = graphScale.getBoundingClientRect().width || 300;
-  const labelFontPx = 11; // .scale-point の font-size
-  const startOffsetPx = 1.25 * labelFontPx; // START: 1.25em左にずれ → グラフ左端はその分右に
-  const goalOffsetPx = 1.25 * labelFontPx;  // GOAL: 1.25em右にずれ → グラフ右端はその分左に
-  const graphLeftPct = (startOffsetPx / containerWidth) * 100;
-  const graphWidthPct = 100 - graphLeftPct - (goalOffsetPx / containerWidth) * 100;
-  graphScale.style.setProperty("--graph-left", graphLeftPct.toFixed(2) + "%");
-  graphScale.style.setProperty("--graph-width", graphWidthPct.toFixed(2) + "%");
+  // START/GOALラベルは横ずれなし（左端=0%・右端=100%）なので、
+  // グラフ本体（標高SVG・進捗バー）は端から端まで100%幅で使用する
+  graphScale.style.setProperty("--graph-left", "0%");
+  graphScale.style.setProperty("--graph-width", "100%");
 
   // 簡易工程図：ズーム中は表示範囲(viewStart〜viewEnd)、非ズーム時はGPXの実測距離全体を使って描画する
   if (zoomLevel !== 0) {
