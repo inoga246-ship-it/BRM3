@@ -179,42 +179,46 @@ distance.addEventListener("focus", () => { tempDistanceValue = distance.value; d
 distance.addEventListener("blur", () => { if (distance.value === "") { distance.value = tempDistanceValue; update(false); } });
 
 // ===== 地図アプリの起動 =====
-// 優先順位：①Cordova InAppBrowser(_system) → ②スキームURL直接 → ③location.href
-// _systemターゲットはOSのデフォルト処理（地図アプリを直接起動）に委ねる。
 function openNativeMap(url) {
-  // Cordova(Monaca)環境
-  if (window.cordova) {
-    // InAppBrowserプラグインが有効な場合
-    const iab = window.cordova.InAppBrowser || (window.cordova.plugins && window.cordova.plugins.inAppBrowser);
-    if (iab) {
-      iab.open(url, "_system", "");
-      return;
-    }
+  const iab = window.cordova && (window.cordova.InAppBrowser || (window.cordova.plugins && window.cordova.plugins.inAppBrowser));
+  if (iab) {
+    // Monaca(Cordova)環境：_system でOSに処理を委ねる（ネイティブアプリを起動）
+    iab.open(url, "_system", "");
+  } else {
+    // 通常ブラウザ環境：新しいタブで開く
+    window.open(url, "_blank");
   }
-  // 非Cordova環境、またはInAppBrowserが無い場合はlocation.hrefで直接遷移
-  window.location.href = url;
 }
 
 function searchOnGoogleMap(keyword) {
   if (!keyword || keyword.includes("ゴール") || keyword.includes("登録なし") || keyword.includes("---")) return;
   const enc = encodeURIComponent(keyword);
   const ua = navigator.userAgent.toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) {
-    // iOS：Apple Maps
+  const isApp = !!window.cordova;
+
+  if (isApp && /iphone|ipad|ipod/.test(ua)) {
+    // Monacaアプリ・iOS → Apple Maps スキーム
     openNativeMap("maps://?q=" + enc);
-  } else {
-    // Android：Googleマップアプリ（comgooglemaps://）→インストール済みならアプリで開く
+  } else if (isApp) {
+    // Monacaアプリ・Android → Google Maps スキーム
     openNativeMap("comgooglemaps://?q=" + enc);
+  } else {
+    // 通常ブラウザ → HTTPS URL（新しいタブ）
+    openNativeMap("https://www.google.com/maps/search/?api=1&query=" + enc);
   }
 }
 
 function searchOnGoogleMapNearby(keyword, lat, lng) {
   const enc = encodeURIComponent(keyword);
   const ua = navigator.userAgent.toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) {
+  const isApp = !!window.cordova;
+
+  if (isApp && /iphone|ipad|ipod/.test(ua)) {
     openNativeMap(`maps://?q=${enc}&sll=${lat},${lng}&z=15`);
-  } else {
+  } else if (isApp) {
     openNativeMap(`comgooglemaps://?q=${enc}&center=${lat},${lng}&zoom=15`);
+  } else {
+    openNativeMap(`https://www.google.com/maps/search/?api=1&query=${enc}&center=${lat},${lng}`);
   }
 }
 
