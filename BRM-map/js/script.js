@@ -3,7 +3,7 @@ const TILE_SUBDOMAINS = ["a", "b", "c"];
 const TILE_CACHE_NAME = "brm-map-tiles-v1";
 const DOWNLOAD_ZOOM_LEVELS = [13, 14, 15, 16]; // ダウンロード対象のズームレベル
 const ROUTE_BUFFER_TILES = 1; // ルート沿いの各タイルの周囲(隣接タイル数)もまとめてダウンロード
-const DOWNLOAD_CONCURRENCY = 8; // 同時ダウンロード数（速度と負荷のバランス）
+const DOWNLOAD_CONCURRENCY = 4; // 同時ダウンロード数（速度と負荷のバランス）
 const GPS_SEARCH_WINDOW_KM = 8;   // 直前にマッチした距離から±この範囲内のみを探索（往復ルートの取り違え防止）
 const GPS_MAX_MATCH_DIST_KM = 0.3; // 最も近い点でも300m以上離れている場合は信頼しない
 
@@ -297,7 +297,7 @@ function saveMapViewState() {
   if (!map) return;
   try {
     const center = map.getCenter();
-    localStorage.setItem("mapViewState", JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() }));
+    localStorage.setItem("mapViewState", JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom(), orientationMode: mapOrientationMode }));
   } catch (e) {}
 }
 function loadMapViewState() {
@@ -800,14 +800,15 @@ function buildCurrentMarkerIcon() {
 const FOLLOW_OFFSET_RATIO = 0.16;
 
 function getOffsetCenter(latlng) {
+  // 北が上モードは中央に表示、進行方向が上モードのみ下寄りオフセットを適用する
+  if (mapOrientationMode === "north") return latlng;
+
   const mapSize = map.getSize();
   const offsetPx = Math.round(mapSize.y * FOLLOW_OFFSET_RATIO);
   const markerPoint = map.latLngToContainerPoint(latlng);
 
-  // heading-upモード（地図が回転中）の場合、オフセット方向を回転角に合わせて補正する
-  // 地図がθ度回転している時、「画面上の下方向」はLeafletの内部座標では(-sinθ, -cosθ)方向になる
-  const angleDeg = mapOrientationMode === "heading" ? -currentRotationDeg : 0;
-  const rad = angleDeg * Math.PI / 180;
+  // heading-upモード（地図が回転中）のため、オフセット方向を回転角に合わせて補正する
+  const rad = -currentRotationDeg * Math.PI / 180;
   const dx = Math.round(offsetPx * Math.sin(rad));
   const dy = Math.round(offsetPx * Math.cos(rad));
   const targetPoint = markerPoint.subtract([dx, dy]);
@@ -1047,6 +1048,9 @@ function initMap() {
   }
   if (savedView) {
     map.setView([savedView.lat, savedView.lng], savedView.zoom, { animate: false });
+    if (savedView.orientationMode === "heading") {
+      setOrientationMode("heading");
+    }
   }
 
   startContinuousGps();
