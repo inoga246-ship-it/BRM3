@@ -23,6 +23,7 @@ let watchId = null;
 let wakeLockSentinel = null;
 let wakeLockEnabled = false;
 let lastMatchedDist = null;
+let maxMatchedDist = 0;  // 通過済み表示（グレー）用の最大到達距離（後退しても縮まない）
 let downloadCancelled = false;
 let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
@@ -924,9 +925,11 @@ function onGpsPosition(pos) {
     const matched = matchPositionToRoute(latitude, longitude, lastMatchedDist);
     if (matched !== null) {
       lastMatchedDist = matched;
+      // 通過済み（グレー）表示は最大到達距離を基準にする。同じ道を戻っても既にグレー化した区間がオレンジに戻らないようにするため。
+      if (matched > maxMatchedDist) maxMatchedDist = matched;
       setStatus(`現在 ${matched.toFixed(1)} km地点`);
       try { localStorage.setItem("distance", matched.toFixed(1)); } catch (e) {}
-      updatePassedLine(matched);
+      updatePassedLine(maxMatchedDist);
       notifyOffRouteIfNeeded(false);
     } else {
       setStatus("ルートから離れています");
