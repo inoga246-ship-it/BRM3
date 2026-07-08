@@ -182,10 +182,8 @@ distance.addEventListener("blur", () => { if (distance.value === "") { distance.
 function openNativeMap(url) {
   const iab = window.cordova && (window.cordova.InAppBrowser || (window.cordova.plugins && window.cordova.plugins.inAppBrowser));
   if (iab) {
-    // Monaca(Cordova)環境：_system でOSに処理を委ねる（ネイティブアプリを起動）
     iab.open(url, "_system", "");
   } else {
-    // 通常ブラウザ環境：新しいタブで開く
     window.open(url, "_blank");
   }
 }
@@ -193,32 +191,22 @@ function openNativeMap(url) {
 function searchOnGoogleMap(keyword) {
   if (!keyword || keyword.includes("ゴール") || keyword.includes("登録なし") || keyword.includes("---")) return;
   const enc = encodeURIComponent(keyword);
-  const ua = navigator.userAgent.toLowerCase();
-  const isApp = !!window.cordova;
-
-  if (isApp && /iphone|ipad|ipod/.test(ua)) {
-    // Monacaアプリ・iOS → Apple Maps スキーム
-    openNativeMap("maps://?q=" + enc);
-  } else if (isApp) {
-    // Monacaアプリ・Android → Google Maps スキーム
-    openNativeMap("comgooglemaps://?q=" + enc);
+  if (window.cordova) {
+    // Monacaアプリ：geo: URI でOSのデフォルト地図アプリ（Google Maps）を起動
+    openNativeMap("geo:0,0?q=" + enc);
   } else {
-    // 通常ブラウザ → HTTPS URL（新しいタブ）
+    // 通常ブラウザ：HTTPS URL で新しいタブを開く
     openNativeMap("https://www.google.com/maps/search/?api=1&query=" + enc);
   }
 }
 
 function searchOnGoogleMapNearby(keyword, lat, lng) {
   const enc = encodeURIComponent(keyword);
-  const ua = navigator.userAgent.toLowerCase();
-  const isApp = !!window.cordova;
-
-  if (isApp && /iphone|ipad|ipod/.test(ua)) {
-    openNativeMap(`maps://?q=${enc}&sll=${lat},${lng}&z=15`);
-  } else if (isApp) {
-    openNativeMap(`comgooglemaps://?q=${enc}&center=${lat},${lng}&zoom=15`);
+  if (window.cordova) {
+    // 現在地の座標付きで検索（geo:緯度,経度?q=キーワード）
+    openNativeMap("geo:" + lat + "," + lng + "?q=" + enc);
   } else {
-    openNativeMap(`https://www.google.com/maps/search/?api=1&query=${enc}&center=${lat},${lng}`);
+    openNativeMap("https://www.google.com/maps/search/?api=1&query=" + enc + "&center=" + lat + "," + lng);
   }
 }
 
