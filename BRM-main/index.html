@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BRM Pace Manager</title>
 <link rel="stylesheet" href="css/style.css">
+
+<!-- PWA対応 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#08090c">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BRM Pace">
 </head>
 <body>
 <div class="container">
@@ -272,5 +281,14 @@ PC2, 山城大橋, 68.0km"></textarea>
 
 <script src="cordova.js"></script>
 <script src="js/script.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((err) => {
+      console.warn("SW registration failed:", err);
+    });
+  });
+}
+</script>
 </body>
 </html>
