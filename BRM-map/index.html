@@ -37,6 +37,19 @@
   </div>
 </div>
 
+<div id="elevationPanel" class="elevation-panel" style="display:none;">
+  <div class="elevation-panel-labels">
+    <span id="elevMinLabel" class="elevation-minmax">--m</span>
+    <span id="elevCurLabel" class="elevation-current">現在 --m</span>
+    <span id="elevMaxLabel" class="elevation-minmax">--m</span>
+  </div>
+  <svg id="elevationSvg" class="elevation-svg" viewBox="0 0 1000 100" preserveAspectRatio="none"></svg>
+  <div class="elevation-panel-dist">
+    <span id="elevFromLabel">-1km</span>
+    <span id="elevToLabel">+9km</span>
+  </div>
+</div>
+
 <div id="orientationModeBtn" class="floating-icon-btn" title="地図の向き">🧭</div>
 <div id="recenterBtn" class="floating-icon-btn recenter-icon" title="現在地に戻る" style="display:none;">🎯</div>
 
@@ -92,6 +105,10 @@
     <div class="map-menu-row">
       <label for="layerShopToggle">🏪 休憩スポット</label>
       <input type="checkbox" id="layerShopToggle" checked>
+    </div>
+    <div class="map-menu-row">
+      <label for="layerElevToggle">📈 標高グラフ（現在地の前後）</label>
+      <input type="checkbox" id="layerElevToggle" checked>
     </div>
 
     <div class="map-menu-section-title">表示設定</div>

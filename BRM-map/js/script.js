@@ -24,6 +24,7 @@ let wakeLockSentinel = null;
 let wakeLockEnabled = false;
 let lastMatchedDist = null;
 let maxMatchedDist = 0;  // 通過済み表示（グレー）用の最大到達距離（後退しても縮まない）
+let hasElevationData = false;  // ルートに標高(ele)データが含まれているか
 let downloadCancelled = false;
 let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
@@ -155,6 +156,14 @@ const layerRouteToggle = document.getElementById("layerRouteToggle");
 const layerArrowToggle = document.getElementById("layerArrowToggle");
 const layerPcToggle = document.getElementById("layerPcToggle");
 const layerShopToggle = document.getElementById("layerShopToggle");
+const layerElevToggle = document.getElementById("layerElevToggle");
+const elevationPanel = document.getElementById("elevationPanel");
+const elevationSvg = document.getElementById("elevationSvg");
+const elevMinLabel = document.getElementById("elevMinLabel");
+const elevMaxLabel = document.getElementById("elevMaxLabel");
+const elevCurLabel = document.getElementById("elevCurLabel");
+const elevFromLabel = document.getElementById("elevFromLabel");
+const elevToLabel = document.getElementById("elevToLabel");
 const menuBtn = document.getElementById("menuBtn");
 const menuCloseBtn = document.getElementById("menuCloseBtn");
 const mapMenuModal = document.getElementById("mapMenuModal");
@@ -201,8 +210,13 @@ function loadRouteFromLocalStorage() {
     if (!raw) return false;
     const points = JSON.parse(raw);
     if (!Array.isArray(points) || points.length === 0) return false;
-    routePoints = points.map(p => ({ lat: p.lat, lon: p.lon, dist: p.dist }));
+    routePoints = points.map(p => {
+      const eleRaw = p.ele !== undefined ? p.ele : (p.elevation !== undefined ? p.elevation : (p.alt !== undefined ? p.alt : (p.altitude !== undefined ? p.altitude : null)));
+      const ele = eleRaw === null || eleRaw === undefined || eleRaw === "" ? null : parseFloat(eleRaw);
+      return { lat: p.lat, lon: p.lon, dist: p.dist, ele: (ele === null || isNaN(ele)) ? null : ele };
+    });
     routeLatLngs = routePoints.map(p => [p.lat, p.lon]);
+    hasElevationData = routePoints.some(p => p.ele !== null);
     return true;
   } catch (e) { return false; }
 }
@@ -249,6 +263,81 @@ function updatePassedLine(currentDistKm) {
       opacity: displaySettings.routeOpacity
     }).addTo(map);
   }
+}
+
+// ===== 標高グラフ（現在地の手前1km〜先9kmを表示し、GPS位置と連動して自動スクロール） =====
+const ELEV_BEHIND_KM = 1;
+const ELEV_AHEAD_KM = 9;
+
+function renderElevationProfile(currentDistKm) {
+  if (!layerElevToggle.checked || !hasElevationData || routePoints.length < 2 || currentDistKm === null || currentDistKm === undefined) {
+    elevationPanel.style.display = "none";
+    return;
+  }
+
+  const totalDist = routePoints[routePoints.length - 1].dist;
+  let fromDist = currentDistKm - ELEV_BEHIND_KM;
+  let toDist = currentDistKm + ELEV_AHEAD_KM;
+  // ルートの端では表示幅を保ったままウィンドウをスライドさせる（グラフの見た目の幅を一定に保つ）
+  if (fromDist < 0) { toDist -= fromDist; fromDist = 0; }
+  if (toDist > totalDist) { fromDist -= (toDist - totalDist); toDist = totalDist; }
+  fromDist = Math.max(0, fromDist);
+
+  // 表示範囲内の点を抽出（前後1点余分に含めて線を範囲端まで届かせる）
+  let startIdx = routePoints.findIndex(p => p.dist >= fromDist);
+  if (startIdx === -1) startIdx = 0;
+  if (startIdx > 0) startIdx -= 1;
+  let endIdx = startIdx;
+  while (endIdx < routePoints.length - 1 && routePoints[endIdx].dist < toDist) endIdx++;
+
+  const windowPoints = routePoints.slice(startIdx, endIdx + 1).filter(p => p.ele !== null);
+  if (windowPoints.length < 2) {
+    elevationPanel.style.display = "none";
+    return;
+  }
+
+  let minEle = Infinity, maxEle = -Infinity;
+  windowPoints.forEach(p => { if (p.ele < minEle) minEle = p.ele; if (p.ele > maxEle) maxEle = p.ele; });
+  if (minEle === maxEle) { minEle -= 5; maxEle += 5; } // 平坦区間でも山なりに潰れないよう余白を確保
+
+  const padY = (maxEle - minEle) * 0.12;
+  const eleTop = maxEle + padY;
+  const eleBottom = minEle - padY;
+
+  const VBW = 1000, VBH = 100;
+  const xOf = (d) => ((d - fromDist) / (toDist - fromDist)) * VBW;
+  const yOf = (e) => VBH - ((e - eleBottom) / (eleTop - eleBottom)) * VBH;
+
+  const linePts = windowPoints.map(p => `${xOf(p.dist).toFixed(1)},${yOf(p.ele).toFixed(1)}`);
+  const areaPts = `0,${VBH} ${linePts.join(" ")} ${VBW},${VBH}`;
+
+  // 現在地の標高（ウィンドウ内で最も近い点から線形補間）
+  let curEle = null;
+  for (let i = 0; i < windowPoints.length - 1; i++) {
+    const a = windowPoints[i], b = windowPoints[i + 1];
+    if (currentDistKm >= a.dist && currentDistKm <= b.dist) {
+      const t = b.dist === a.dist ? 0 : (currentDistKm - a.dist) / (b.dist - a.dist);
+      curEle = a.ele + (b.ele - a.ele) * t;
+      break;
+    }
+  }
+  if (curEle === null) curEle = windowPoints[windowPoints.length - 1].ele;
+  const curX = xOf(currentDistKm);
+  const curY = yOf(curEle);
+
+  elevationSvg.innerHTML =
+    `<polygon points="${areaPts}" fill="rgba(0, 210, 255, 0.18)"></polygon>` +
+    `<polyline points="${linePts.join(" ")}" fill="none" stroke="#00d2ff" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>` +
+    `<line x1="${curX.toFixed(1)}" y1="0" x2="${curX.toFixed(1)}" y2="${VBH}" stroke="#ffcc00" stroke-width="1.5" stroke-dasharray="4,3" vector-effect="non-scaling-stroke"></line>` +
+    `<circle cx="${curX.toFixed(1)}" cy="${curY.toFixed(1)}" r="4" fill="#ffcc00" stroke="#04222b" stroke-width="1.5"></circle>`;
+
+  elevMinLabel.textContent = `${Math.round(minEle)}m`;
+  elevMaxLabel.textContent = `${Math.round(maxEle)}m`;
+  elevCurLabel.textContent = `現在 ${Math.round(curEle)}m`;
+  elevFromLabel.textContent = fromDist <= 0 ? "0km" : `${(currentDistKm - fromDist).toFixed(1)}km手前`;
+  elevToLabel.textContent = toDist >= totalDist ? `${totalDist.toFixed(1)}km（終点）` : `${(toDist - currentDistKm).toFixed(1)}km先`;
+
+  elevationPanel.style.display = "";
 }
 
 // 2地点間の方位角(度、北=0、時計回り)を計算
@@ -594,6 +683,11 @@ layerShopToggle.addEventListener("change", () => {
   if (layerShopToggle.checked) { if (shopMarkers.length === 0 && routePoints.length > 0) renderPcShopMarkers(); else setLayerVisible(shopMarkers, true); }
   else { setLayerVisible(shopMarkers, false); }
 });
+layerElevToggle.addEventListener("change", () => {
+  localStorage.setItem("layerElev", layerElevToggle.checked);
+  if (layerElevToggle.checked) { renderElevationProfile(lastMatchedDist); }
+  else { elevationPanel.style.display = "none"; }
+});
 // レイヤーのON/OFF設定をlocalStorageから復元する
 function loadLayerSettings() {
   const load = (key, toggle, defaultVal) => {
@@ -604,6 +698,7 @@ function loadLayerSettings() {
   load("layerArrow", layerArrowToggle, true);
   load("layerPc", layerPcToggle, true);
   load("layerShop", layerShopToggle, true);
+  load("layerElev", layerElevToggle, true);
 }
 
 // ===== 地図上に浮かぶアイコン/ボタン群の長押しフリー移動（汎用） =====
@@ -930,6 +1025,7 @@ function onGpsPosition(pos) {
       setStatus(`現在 ${matched.toFixed(1)} km地点`);
       try { localStorage.setItem("distance", matched.toFixed(1)); } catch (e) {}
       updatePassedLine(maxMatchedDist);
+      renderElevationProfile(matched);
       notifyOffRouteIfNeeded(false);
     } else {
       setStatus("ルートから離れています");
@@ -1046,6 +1142,8 @@ function initMap() {
     if (!layerPcToggle.checked) setLayerVisible(pcMarkers, false);
     if (!layerShopToggle.checked) setLayerVisible(shopMarkers, false);
     setStatus(`ルート読込済（全長 ${routePoints[routePoints.length - 1].dist.toFixed(1)}km）`);
+    const savedDist = parseFloat(localStorage.getItem("distance") || "");
+    if (!isNaN(savedDist)) { lastMatchedDist = savedDist; maxMatchedDist = savedDist; updatePassedLine(maxMatchedDist); renderElevationProfile(savedDist); }
   } else {
     setStatus("ルート未読込（BRM PACE MANAGER側でGPXを読込んでください）");
   }
