@@ -3,7 +3,7 @@ const TILE_SUBDOMAINS = ["a", "b", "c"];
 const TILE_CACHE_NAME = "brm-map-tiles-v1";
 const DOWNLOAD_ZOOM_LEVELS = [13, 14, 15, 16]; // ダウンロード対象のズームレベル
 const ROUTE_BUFFER_TILES = 1; // ルート沿いの各タイルの周囲(隣接タイル数)もまとめてダウンロード
-const DOWNLOAD_CONCURRENCY = 4; // 同時ダウンロード数（速度と負荷のバランス）
+const DOWNLOAD_CONCURRENCY = 8; // 同時ダウンロード数（速度と負荷のバランス）
 const GPS_SEARCH_WINDOW_KM = 8;   // 直前にマッチした距離から±この範囲内のみを探索（往復ルートの取り違え防止）
 const GPS_MAX_MATCH_DIST_KM = 0.3; // 最も近い点でも300m以上離れている場合は信頼しない
 
@@ -893,7 +893,7 @@ function buildCurrentMarkerIcon() {
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 // FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
-const FOLLOW_OFFSET_RATIO = 0.16;
+const FOLLOW_OFFSET_RATIO = 0.12;
 
 function getOffsetCenter(latlng) {
   // 北が上モードは中央に表示、進行方向が上モードのみ下寄りオフセットを適用する
