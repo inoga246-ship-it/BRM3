@@ -1,0 +1,9 @@
+このフォルダに以下のファイルを配置してください（README.md の「完全オフライン起動について」を参照）。
+
+js/vendor/leaflet/leaflet.js
+js/vendor/leaflet/leaflet.css
+js/vendor/leaflet/images/marker-icon.png
+js/vendor/leaflet/images/marker-icon-2x.png
+js/vendor/leaflet/images/marker-shadow.png
+
+配置後、このファイルは削除して問題ありません。

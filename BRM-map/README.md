@@ -41,9 +41,41 @@ GPXファイル自体は地図側では読み込みません（BRM-main側で読
 
 「← 戻る」は基本的にブラウザの**履歴で戻る**（`history.back()`）動作です。BRM-mainの🗺️ボタンから遷移してきた場合は、配置場所によらず正しく戻れます。直接このURLを開いた場合（履歴が無い場合）のみ、同階層の`index.html`へ遷移するフォールバックになっています。
 
+## 完全オフライン起動について
+
+**Leaflet本体（CSS/JS/マーカー画像）はこのプロジェクト内にローカル同梱（vendor化）する構成になっています。** `js/vendor/leaflet/` 配下に以下の5ファイルを配置してください（このリポジトリには同梱されていないため、初回のみ手動でダウンロードが必要です）。
+
+```
+js/vendor/leaflet/leaflet.js
+js/vendor/leaflet/leaflet.css
+js/vendor/leaflet/images/marker-icon.png
+js/vendor/leaflet/images/marker-icon-2x.png
+js/vendor/leaflet/images/marker-shadow.png
+```
+
+ダウンロード例（PCのターミナルで実行、`BRM-map`フォルダ直下で）：
+
+```
+mkdir -p js/vendor/leaflet/images
+curl -o js/vendor/leaflet/leaflet.js https://unpkg.com/leaflet@1.9.4/dist/leaflet.js
+curl -o js/vendor/leaflet/leaflet.css https://unpkg.com/leaflet@1.9.4/dist/leaflet.css
+curl -o js/vendor/leaflet/images/marker-icon.png https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png
+curl -o js/vendor/leaflet/images/marker-icon-2x.png https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png
+curl -o js/vendor/leaflet/images/marker-shadow.png https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png
+```
+
+配置後、Service Worker（`sw.js`）がこれらもアプリ本体と一緒にオフラインキャッシュするため、**2回目以降の起動はLeaflet本体も含めて完全にネット接続不要**になります（1回目のアクセス時にService Workerのインストールが必要なため、最初の1回だけはネット接続がある状態でアプリを開いてください）。
+
+配置を忘れた場合でもアプリ自体は起動しますが、Leafletの読み込みに失敗し地図が表示されません（ブラウザのコンソールに404エラーが出ます）。
+
+### オフライン時の挙動
+
+- 画面上部に **「オフライン」バッジ** が表示され、現在オフラインで動作していることがわかります（`navigator.onLine`のオンライン/オフライン切り替えイベントで自動更新）。
+- ルート周辺タイル未保存の範囲でオフラインになった場合、タイル画像は壊れたアイコンではなく目立たない灰色プレースホルダーで表示されます（エラーが連続で発生してアプリが重くなることも防止）。
+- GPS位置取得自体は端末のGPSハードウェアを使うため、通信が無くても動作します。
+
 ## 既知の制限・今後の課題
 
-- **Leaflet本体（CSS/JS）はCDN（unpkg.com）から読み込んでいます。** 初回アクセス時にインターネット接続が必要です。完全オフライン起動を保証したい場合は、Leafletのファイルをこのプロジェクト内にダウンロードして同梱する（vendor化する）対応を追加するのがおすすめです。
 - 「進行方向が上」モードの地図回転は、CSSのtransformでビジュアルを回転させる簡易的な実装です。回転中のピンチズーム操作は見た目と実際の中心がずれる場合があります（フォロー中心固定の自動追従との併用を推奨）。
 - タイルの事前ダウンロードはズームレベル13〜16のみを対象にしています。より詳細な地図（建物形状などが見えるレベル）が必要な場合はズームレベルの追加が必要ですが、その分タイル数・容量が増えます。
 - iOS Safari等、Wake Lock APIに対応していない/制限がある環境では、画面の自動消灯防止が機能しない場合があります。
