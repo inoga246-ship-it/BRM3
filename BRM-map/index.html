@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>BRM Map</title>
-<link rel="stylesheet" href="js/vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -22,7 +22,6 @@
       <span id="headerRemain" class="header-pace-value">--</span>
     </div>
     <span id="statusText" class="map-status">GPS待機中…</span>
-    <span id="offlineBadge" class="offline-badge" style="display:none;" title="オフラインです。GPSと保存済みタイルのみで動作しています">オフライン</span>
     <button id="menuBtn" title="メニュー">☰</button>
   </div>
   <div class="map-header-row2" id="headerRow2">
@@ -171,7 +170,7 @@
   </div>
 </div>
 
-<script src="js/vendor/leaflet/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/script.js"></script>
 </body>
 </html>
