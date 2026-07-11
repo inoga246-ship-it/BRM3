@@ -3,7 +3,7 @@ const TILE_SUBDOMAINS = ["a", "b", "c"];
 const TILE_CACHE_NAME = "brm-map-tiles-v1";
 const DOWNLOAD_ZOOM_LEVELS = [13, 14, 15, 16]; // ダウンロード対象のズームレベル
 const ROUTE_BUFFER_TILES = 1; // ルート沿いの各タイルの周囲(隣接タイル数)もまとめてダウンロード
-const DOWNLOAD_CONCURRENCY = 8; // 同時ダウンロード数（速度と負荷のバランス）
+const DOWNLOAD_CONCURRENCY = 4; // 同時ダウンロード数（速度と負荷のバランス）
 const GPS_SEARCH_WINDOW_KM = 8;   // 直前にマッチした距離から±この範囲内のみを探索（往復ルートの取り違え防止）
 const GPS_MAX_MATCH_DIST_KM = 0.3; // 最も近い点でも300m以上離れている場合は信頼しない
 
@@ -171,6 +171,7 @@ const layerShopToggle = document.getElementById("layerShopToggle");
 const layerElevToggle = document.getElementById("layerElevToggle");
 const elevationPanel = document.getElementById("elevationPanel");
 const elevationSvg = document.getElementById("elevationSvg");
+const elevationPoiLayer = document.getElementById("elevationPoiLayer");
 const elevMinLabel = document.getElementById("elevMinLabel");
 const elevMaxLabel = document.getElementById("elevMaxLabel");
 const elevCurLabel = document.getElementById("elevCurLabel");
@@ -284,6 +285,7 @@ const ELEV_AHEAD_KM = 9;
 function renderElevationProfile(currentDistKm) {
   if (!layerElevToggle.checked || !hasElevationData || routePoints.length < 2 || currentDistKm === null || currentDistKm === undefined) {
     elevationPanel.style.display = "none";
+    elevationPoiLayer.innerHTML = "";
     return;
   }
 
@@ -305,6 +307,7 @@ function renderElevationProfile(currentDistKm) {
   const windowPoints = routePoints.slice(startIdx, endIdx + 1).filter(p => p.ele !== null);
   if (windowPoints.length < 2) {
     elevationPanel.style.display = "none";
+    elevationPoiLayer.innerHTML = "";
     return;
   }
 
@@ -320,20 +323,22 @@ function renderElevationProfile(currentDistKm) {
   const xOf = (d) => ((d - fromDist) / (toDist - fromDist)) * VBW;
   const yOf = (e) => VBH - ((e - eleBottom) / (eleTop - eleBottom)) * VBH;
 
+  // ウィンドウ内の標高を距離から線形補間で求める（現在地の点や、チェックポイント/コンビニの位置合わせに使う）
+  const eleAtDist = (distKm) => {
+    for (let i = 0; i < windowPoints.length - 1; i++) {
+      const a = windowPoints[i], b = windowPoints[i + 1];
+      if (distKm >= a.dist && distKm <= b.dist) {
+        const t = b.dist === a.dist ? 0 : (distKm - a.dist) / (b.dist - a.dist);
+        return a.ele + (b.ele - a.ele) * t;
+      }
+    }
+    return distKm <= windowPoints[0].dist ? windowPoints[0].ele : windowPoints[windowPoints.length - 1].ele;
+  };
+
   const linePts = windowPoints.map(p => `${xOf(p.dist).toFixed(1)},${yOf(p.ele).toFixed(1)}`);
   const areaPts = `0,${VBH} ${linePts.join(" ")} ${VBW},${VBH}`;
 
-  // 現在地の標高（ウィンドウ内で最も近い点から線形補間）
-  let curEle = null;
-  for (let i = 0; i < windowPoints.length - 1; i++) {
-    const a = windowPoints[i], b = windowPoints[i + 1];
-    if (currentDistKm >= a.dist && currentDistKm <= b.dist) {
-      const t = b.dist === a.dist ? 0 : (currentDistKm - a.dist) / (b.dist - a.dist);
-      curEle = a.ele + (b.ele - a.ele) * t;
-      break;
-    }
-  }
-  if (curEle === null) curEle = windowPoints[windowPoints.length - 1].ele;
+  const curEle = eleAtDist(currentDistKm);
   const curX = xOf(currentDistKm);
   const curY = yOf(curEle);
 
@@ -342,6 +347,18 @@ function renderElevationProfile(currentDistKm) {
     `<polyline points="${linePts.join(" ")}" fill="none" stroke="#00d2ff" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>` +
     `<line x1="${curX.toFixed(1)}" y1="0" x2="${curX.toFixed(1)}" y2="${VBH}" stroke="#ffcc00" stroke-width="1.5" stroke-dasharray="4,3" vector-effect="non-scaling-stroke"></line>` +
     `<circle cx="${curX.toFixed(1)}" cy="${curY.toFixed(1)}" r="4" fill="#ffcc00" stroke="#04222b" stroke-width="1.5"></circle>`;
+
+  // 次のPC・コンビニが表示範囲内にあればマークを立てる（標高線上の位置にバッジ＋短い引き出し線）
+  let poiHtml = "";
+  const addPoiBadge = (item, cls, label) => {
+    if (item.dist < fromDist || item.dist > toDist) return;
+    const leftPct = (xOf(item.dist) / VBW * 100).toFixed(2);
+    const topPct = yOf(eleAtDist(item.dist)).toFixed(1);
+    poiHtml += `<div class="elevation-poi-badge ${cls}" style="left:${leftPct}%; top:${topPct}%;">${label}</div>`;
+  };
+  pcList.forEach(item => addPoiBadge(item, "elevation-poi-pc", escapeHtml((item.label || "PC").slice(0, 4))));
+  shopList.forEach(item => addPoiBadge(item, "elevation-poi-shop", "🏪"));
+  elevationPoiLayer.innerHTML = poiHtml;
 
   elevMinLabel.textContent = `${Math.round(minEle)}m`;
   elevMaxLabel.textContent = `${Math.round(maxEle)}m`;
@@ -886,16 +903,25 @@ makeFloatingDraggable(orientationModeBtn, "mapOrientationBtnPos", () => {
 });
 
 // ===== 現在地マーカーのアイコン生成（形状：矢印／丸／自転車／ピンから選択可能） =====
-// SVGで描く➡型の太矢印（進行方向が分かりやすいように先端が太く、胴が細い形状）
+// SVGで描く「➤」風のスリムな矢印（先端が鋭く、後端がへこんだダート型）
 // 上が進行方向。rotate()で実際の方向に合わせて回転させる。
 function buildArrowSvgHtml(size, color) {
   const c = color || "var(--marker-color)";
   const s = size || 32;
   // viewBox="-16 -16 32 32" で中心を(0,0)に設定。
-  // 先端が上(y=-16)を向く矢印型パス
+  // 先端が上(y=-16)を向く「➤」風のダート型（後端中央がへこんだ形状）
   return `<svg viewBox="-16 -16 32 32" width="${s}" height="${s}" xmlns="http://www.w3.org/2000/svg" overflow="visible">
-    <path class="arrow-svg-outline" d="M0,-15 L10,8 L3,4 L3,14 L-3,14 L-3,4 L-10,8 Z" transform="scale(1.08)"/>
-    <path class="arrow-svg-body" d="M0,-15 L10,8 L3,4 L3,14 L-3,14 L-3,4 L-10,8 Z" fill="${c}"/>
+    <path class="arrow-svg-outline" d="M0,-16 L11,11 L0,4 L-11,11 Z" transform="scale(1.08)"/>
+    <path class="arrow-svg-body" d="M0,-16 L11,11 L0,4 L-11,11 Z" fill="${c}"/>
+  </svg>`;
+}
+
+// 円／自転車／ピン形状で使う「向き」インジケーター（形自体は回転させず、小さな三角マークだけを中心の周りに旋回させる）
+function buildHeadingTickSvgHtml(color) {
+  const c = color || "var(--marker-color)";
+  return `<svg viewBox="-16 -16 32 32" width="32" height="32" xmlns="http://www.w3.org/2000/svg" overflow="visible">
+    <path class="heading-tick-outline" d="M0,-19 L5,-9 L-5,-9 Z"/>
+    <path class="heading-tick-body" d="M0,-19 L5,-9 L-5,-9 Z" fill="${c}"/>
   </svg>`;
 }
 
@@ -903,14 +929,14 @@ function buildCurrentMarkerIcon() {
   const shape = displaySettings.markerShape || "arrow";
   let html, size, anchor;
   if (shape === "circle") {
-    html = '<div class="current-location-circle"></div>';
-    size = [18, 18]; anchor = [9, 9];
+    html = `<div class="current-location-multi-wrapper"><div class="current-location-circle"></div><div class="current-location-arrow-outer">${buildHeadingTickSvgHtml()}</div></div>`;
+    size = [32, 32]; anchor = [16, 16];
   } else if (shape === "bike") {
-    html = '<div class="current-location-emoji">🚲</div>';
-    size = [26, 26]; anchor = [13, 18];
+    html = `<div class="current-location-multi-wrapper"><div class="current-location-emoji">🚲</div><div class="current-location-arrow-outer">${buildHeadingTickSvgHtml()}</div></div>`;
+    size = [32, 32]; anchor = [16, 16];
   } else if (shape === "pin") {
-    html = '<div class="current-location-emoji">📍</div>';
-    size = [26, 26]; anchor = [13, 24];
+    html = `<div class="current-location-multi-wrapper"><div class="current-location-emoji">📍</div><div class="current-location-arrow-outer">${buildHeadingTickSvgHtml()}</div></div>`;
+    size = [32, 32]; anchor = [16, 16];
   } else {
     html = `<div class="current-location-arrow-outer">${buildArrowSvgHtml(32)}</div>`;
     size = [32, 32]; anchor = [16, 16];
@@ -920,7 +946,7 @@ function buildCurrentMarkerIcon() {
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 // FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
-const FOLLOW_OFFSET_RATIO = 0.12;
+const FOLLOW_OFFSET_RATIO = 0.16;
 
 function getOffsetCenter(latlng) {
   // 北が上モードは中央に表示、進行方向が上モードのみ下寄りオフセットを適用する

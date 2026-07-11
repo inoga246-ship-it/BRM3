@@ -47,6 +47,24 @@ html, body {
 }
 .arrow-svg-body { fill: var(--marker-color); }
 .arrow-svg-outline { fill: rgba(0,0,0,0.4); }
+.heading-tick-body { fill: var(--marker-color); }
+.heading-tick-outline { fill: rgba(0,0,0,0.4); }
+/* 丸／自転車／ピン形状：形自体は常に正立のまま、向きインジケーター（小さな三角）だけが中心の周りを旋回する */
+.current-location-multi-wrapper {
+  position: relative;
+  width: 32px; height: 32px;
+}
+.current-location-multi-wrapper .current-location-circle,
+.current-location-multi-wrapper .current-location-emoji {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+.current-location-multi-wrapper .current-location-arrow-outer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+}
 .current-location-circle {
   width: 18px; height: 18px;
   border-radius: 50%;
@@ -510,11 +528,57 @@ html, body {
   font-size: 11px;
   color: #94a3b8;
 }
-.elevation-svg {
+.elevation-graph-area {
+  position: relative;
   width: 100%;
   height: 72px;
+}
+.elevation-svg {
+  width: 100%;
+  height: 100%;
   display: block;
   overflow: visible;
+}
+.elevation-poi-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.elevation-poi-badge {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  font-size: 9px;
+  font-weight: bold;
+  white-space: nowrap;
+  line-height: 1;
+}
+.elevation-poi-pc {
+  background: #00d2ff;
+  color: #04222b;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid #ffffff;
+  box-shadow: 0 0 4px rgba(0, 210, 255, 0.8);
+  --poi-stem-color: #00d2ff;
+}
+.elevation-poi-shop {
+  background: #0b3d2e;
+  color: #00ff99;
+  padding: 1px 3px;
+  border-radius: 50%;
+  border: 1px solid #00ff99;
+  box-shadow: 0 0 4px rgba(0, 255, 153, 0.7);
+  --poi-stem-color: #00ff99;
+}
+.elevation-poi-badge::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 1px;
+  height: 5px;
+  background: var(--poi-stem-color, #ffffff);
+  opacity: 0.8;
 }
 .elevation-panel-dist {
   display: flex;
