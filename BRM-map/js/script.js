@@ -3,7 +3,7 @@ const TILE_SUBDOMAINS = ["a", "b", "c"];
 const TILE_CACHE_NAME = "brm-map-tiles-v1";
 const DOWNLOAD_ZOOM_LEVELS = [13, 14, 15, 16]; // ダウンロード対象のズームレベル
 const ROUTE_BUFFER_TILES = 1; // ルート沿いの各タイルの周囲(隣接タイル数)もまとめてダウンロード
-const DOWNLOAD_CONCURRENCY = 8; // 同時ダウンロード数（速度と負荷のバランス）
+const DOWNLOAD_CONCURRENCY = 4; // 同時ダウンロード数（速度と負荷のバランス）
 const GPS_SEARCH_WINDOW_KM = 8;   // 直前にマッチした距離から±この範囲内のみを探索（往復ルートの取り違え防止）
 const GPS_MAX_MATCH_DIST_KM = 0.3; // 最も近い点でも300m以上離れている場合は信頼しない
 
@@ -18,6 +18,8 @@ let routeDirectionMarkers = [];
 let currentMarker = null;
 let pcMarkers = [];
 let shopMarkers = [];
+let pcList = [];   // [{dist, label}, ...] ヘッダーの「次のPCまでの距離」計算にも使う
+let shopList = []; // [{dist, label}, ...] ヘッダーの「次のコンビニまでの距離」計算にも使う
 let followMode = true;
 let watchId = null;
 let wakeLockSentinel = null;
@@ -52,6 +54,8 @@ function initHdr2Items() {
     { toggle: hdr2RemainTimeToggle, el: hdr2RemainTime, sep: ".hdr2-remaintime-sep", key: "hdr2RemainTime" },
     { toggle: hdr2NeedToggle, el: hdr2Need, sep: ".hdr2-need-sep", key: "hdr2Need" },
     { toggle: hdr2SavingToggle, el: hdr2Saving, sep: ".hdr2-saving-sep", key: "hdr2Saving" },
+    { toggle: hdr2PcToggle, el: hdr2Pc, sep: ".hdr2-pc-sep", key: "hdr2Pc" },
+    { toggle: hdr2ShopToggle, el: hdr2Shop, sep: null, key: "hdr2Shop" },
   ];
 }
 
@@ -72,11 +76,13 @@ function applyHdr2Visibility() {
   HDR2_ITEMS.forEach(item => {
     item.el.style.display = item.toggle.checked ? "inline-flex" : "none";
   });
+  // 各セパレータはDOM上でitem[idx]の直後・item[idx+1]の直前にあるため、その両隣が表示されている時だけ表示する
   HDR2_ITEMS.forEach((item, idx) => {
+    if (!item.sep) return;
     const sepEl = headerRow2.querySelector(item.sep);
     if (!sepEl) return;
-    const leftVisible = idx > 0 && HDR2_ITEMS[idx - 1].toggle.checked;
-    const rightVisible = item.toggle.checked;
+    const leftVisible = item.toggle.checked;
+    const rightVisible = (idx + 1 < HDR2_ITEMS.length) && HDR2_ITEMS[idx + 1].toggle.checked;
     sepEl.style.display = (leftVisible && rightVisible) ? "inline" : "none";
   });
   const anyVisible = HDR2_ITEMS.some(i => i.toggle.checked);
@@ -142,16 +148,22 @@ const hdr2Elapsed = document.getElementById("hdr2Elapsed");
 const hdr2RemainTime = document.getElementById("hdr2RemainTime");
 const hdr2Need = document.getElementById("hdr2Need");
 const hdr2Saving = document.getElementById("hdr2Saving");
+const hdr2Pc = document.getElementById("hdr2Pc");
+const hdr2Shop = document.getElementById("hdr2Shop");
 const hdr2SpeedVal = document.getElementById("hdr2SpeedVal");
 const hdr2ElapsedVal = document.getElementById("hdr2ElapsedVal");
 const hdr2RemainTimeVal = document.getElementById("hdr2RemainTimeVal");
 const hdr2NeedVal = document.getElementById("hdr2NeedVal");
 const hdr2SavingVal = document.getElementById("hdr2SavingVal");
+const hdr2PcVal = document.getElementById("hdr2PcVal");
+const hdr2ShopVal = document.getElementById("hdr2ShopVal");
 const hdr2SpeedToggle = document.getElementById("hdr2SpeedToggle");
 const hdr2ElapsedToggle = document.getElementById("hdr2ElapsedToggle");
 const hdr2RemainTimeToggle = document.getElementById("hdr2RemainTimeToggle");
 const hdr2NeedToggle = document.getElementById("hdr2NeedToggle");
 const hdr2SavingToggle = document.getElementById("hdr2SavingToggle");
+const hdr2PcToggle = document.getElementById("hdr2PcToggle");
+const hdr2ShopToggle = document.getElementById("hdr2ShopToggle");
 const layerRouteToggle = document.getElementById("layerRouteToggle");
 const layerArrowToggle = document.getElementById("layerArrowToggle");
 const layerPcToggle = document.getElementById("layerPcToggle");
@@ -434,10 +446,12 @@ function renderPcShopMarkers() {
   shopMarkers.forEach(m => map.removeLayer(m)); shopMarkers = [];
   if (routePoints.length === 0) return;
 
-  const pcList = parseSimpleList(localStorage.getItem("pcList3") || "", true);
-  const shopList = parseSimpleList(localStorage.getItem("shopList3") || "", false);
+  const pcList2 = parseSimpleList(localStorage.getItem("pcList3") || "", true);
+  const shopList2 = parseSimpleList(localStorage.getItem("shopList3") || "", false);
+  pcList = pcList2;
+  shopList = shopList2;
 
-  pcList.forEach(item => {
+  pcList2.forEach(item => {
     const latlon = findLatLonAtDistance(item.dist);
     if (!latlon) return;
     const icon = L.divIcon({ className: "pc-marker-icon", html: `<div class="pc-marker-dot">${escapeHtml(item.label).slice(0, 8)}</div>`, iconSize: [0, 0] });
@@ -446,7 +460,7 @@ function renderPcShopMarkers() {
     pcMarkers.push(marker);
   });
 
-  shopList.forEach(item => {
+  shopList2.forEach(item => {
     const latlon = findLatLonAtDistance(item.dist);
     if (!latlon) return;
     const icon = L.divIcon({ className: "shop-marker-icon", html: `<div class="shop-marker-dot">🏪</div>`, iconSize: [0, 0] });
@@ -454,6 +468,19 @@ function renderPcShopMarkers() {
     marker.addTo(map);
     shopMarkers.push(marker);
   });
+}
+
+// 現在距離(currentDistKm)より先にある最も近い地点までの残り距離(km)を返す（無ければnull）
+function getNextPointRemainKm(list, currentDistKm) {
+  if (!list || list.length === 0 || currentDistKm === null || currentDistKm === undefined) return null;
+  let nearestDist = null;
+  list.forEach(item => {
+    if (item.dist >= currentDistKm - 0.05 && (nearestDist === null || item.dist < nearestDist)) {
+      nearestDist = item.dist;
+    }
+  });
+  if (nearestDist === null) return null;
+  return Math.max(0, nearestDist - currentDistKm);
 }
 
 // ===== GPS位置とルートのマッチング（往復ルート対策：直前距離からの連続性ウィンドウ探索） =====
@@ -893,7 +920,7 @@ function buildCurrentMarkerIcon() {
 
 // ===== 現在地マーカー（進行方向矢印付き） =====
 // FOLLOW_OFFSET_RATIO: 現在地を画面の何割下に配置するか（0=中央、0.3=中央より30%下）
-const FOLLOW_OFFSET_RATIO = 0.12;
+const FOLLOW_OFFSET_RATIO = 0.16;
 
 function getOffsetCenter(latlng) {
   // 北が上モードは中央に表示、進行方向が上モードのみ下寄りオフセットを適用する
@@ -974,6 +1001,14 @@ function updatePaceDisplay(latitude, longitude) {
   // ヘッダー2段目の各項目を更新（ON表示のものだけ値を計算）
   if (hdr2SpeedToggle.checked) {
     hdr2SpeedVal.innerText = instantSpeedKph !== null ? instantSpeedKph.toFixed(1) : "--";
+  }
+  if (hdr2PcToggle.checked) {
+    const nextPcKm = getNextPointRemainKm(pcList, lastMatchedDist);
+    hdr2PcVal.innerText = nextPcKm !== null ? nextPcKm.toFixed(1) : "--";
+  }
+  if (hdr2ShopToggle.checked) {
+    const nextShopKm = getNextPointRemainKm(shopList, lastMatchedDist);
+    hdr2ShopVal.innerText = nextShopKm !== null ? nextShopKm.toFixed(1) : "--";
   }
   try {
     const startTimeStr = localStorage.getItem("startTime");

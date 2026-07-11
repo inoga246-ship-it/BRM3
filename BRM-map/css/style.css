@@ -119,8 +119,8 @@ html, body {
   justify-content: center;
   gap: 0;
   padding: 3px 10px 6px;
-  flex-wrap: nowrap;
-  overflow: hidden;
+  flex-wrap: wrap;
+  row-gap: 2px;
   min-height: 0;
 }
 .map-header-row2:empty,
@@ -523,3 +523,4 @@ html, body {
   color: #64748b;
   margin-top: 2px;
 }
+
