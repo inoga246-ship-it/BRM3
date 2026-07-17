@@ -38,6 +38,8 @@
     <span class="hdr2-item" id="hdr2Pc" style="display:none;"><span class="hdr2-label">PC</span><span class="hdr2-value" id="hdr2PcVal">--</span><span class="hdr2-unit">km</span></span>
     <span class="hdr2-sep hdr2-pc-sep" style="display:none;">│</span>
     <span class="hdr2-item" id="hdr2Shop" style="display:none;"><span class="hdr2-label">🏪</span><span class="hdr2-value" id="hdr2ShopVal">--</span><span class="hdr2-unit">km</span></span>
+    <span class="hdr2-sep hdr2-shop-sep" style="display:none;">│</span>
+    <span class="hdr2-item" id="hdr2Battery" style="display:none;"><span class="hdr2-label">🔋</span><span class="hdr2-value" id="hdr2BatteryVal">--</span><span class="hdr2-unit">%</span></span>
   </div>
 </div>
 
@@ -103,6 +105,37 @@
       <label for="hdr2ShopToggle">🏪 次のコンビニまでの距離</label>
       <input type="checkbox" id="hdr2ShopToggle">
     </div>
+    <div class="map-menu-row">
+      <label for="hdr2BatteryToggle">🔋 バッテリー残量</label>
+      <input type="checkbox" id="hdr2BatteryToggle">
+    </div>
+
+    <div class="map-menu-section-title">ヘッダー文字の見た目</div>
+    <div class="map-menu-row">
+      <label for="hdrRow1SizeInput">1行目（GPS状態等）の文字サイズ <span id="hdrRow1SizeValue">11</span>px</label>
+      <input type="range" id="hdrRow1SizeInput" min="9" max="28" step="1" value="11">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdrRow1ColorInput">1行目の文字色</label>
+      <input type="color" id="hdrRow1ColorInput" value="#00ff66">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdrRow2SizeInput">2行目（速度・残り時間等）の文字サイズ <span id="hdrRow2SizeValue">15</span>px</label>
+      <input type="range" id="hdrRow2SizeInput" min="9" max="32" step="1" value="15">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdrRow2ColorInput">2行目の文字色</label>
+      <input type="color" id="hdrRow2ColorInput" value="#ffffff">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdrRow3SizeInput">3行目（2行目が折り返された分）の文字サイズ <span id="hdrRow3SizeValue">15</span>px</label>
+      <input type="range" id="hdrRow3SizeInput" min="9" max="32" step="1" value="15">
+    </div>
+    <div class="map-menu-row">
+      <label for="hdrRow3ColorInput">3行目の文字色</label>
+      <input type="color" id="hdrRow3ColorInput" value="#ffffff">
+    </div>
+    <button id="resetHdrTextSettingsBtn" class="map-menu-item secondary">ヘッダー文字の見た目を初期値に戻す</button>
 
     <div class="map-menu-section-title">地図の表示項目</div>
     <div class="map-menu-row">

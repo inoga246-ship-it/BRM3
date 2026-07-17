@@ -27,6 +27,9 @@ let wakeLockEnabled = false;
 let lastMatchedDist = null;
 let maxMatchedDist = 0;  // 通過済み表示（グレー）用の最大到達距離（後退しても縮まない）
 let hasElevationData = false;  // ルートに標高(ele)データが含まれているか
+let lastMatchSuccessTime = null; // 直近でマッチに成功した時刻（アプリ復帰直後の再マッチ判定に使う）
+let currentBatteryLevel = null;   // バッテリー残量(%)。取得できない環境ではnullのまま
+let currentBatteryCharging = null;
 let downloadCancelled = false;
 let isDownloading = false;
 let mapOrientationMode = "north"; // "north"（北が上） | "heading"（進行方向が上）
@@ -55,7 +58,8 @@ function initHdr2Items() {
     { toggle: hdr2NeedToggle, el: hdr2Need, sep: ".hdr2-need-sep", key: "hdr2Need" },
     { toggle: hdr2SavingToggle, el: hdr2Saving, sep: ".hdr2-saving-sep", key: "hdr2Saving" },
     { toggle: hdr2PcToggle, el: hdr2Pc, sep: ".hdr2-pc-sep", key: "hdr2Pc" },
-    { toggle: hdr2ShopToggle, el: hdr2Shop, sep: null, key: "hdr2Shop" },
+    { toggle: hdr2ShopToggle, el: hdr2Shop, sep: ".hdr2-shop-sep", key: "hdr2Shop" },
+    { toggle: hdr2BatteryToggle, el: hdr2Battery, sep: null, key: "hdr2Battery" },
   ];
 }
 
@@ -87,6 +91,8 @@ function applyHdr2Visibility() {
   });
   const anyVisible = HDR2_ITEMS.some(i => i.toggle.checked);
   headerRow2.style.display = anyVisible ? "flex" : "none";
+  tagHdr2LineGroups();
+  updateBatteryHeaderDisplay();
 }
 function setupHdr2Listeners() {
   HDR2_ITEMS.forEach(item => {
@@ -137,6 +143,10 @@ function notifyOffRouteIfNeeded(isOffRoute) {
 const DEFAULT_DISPLAY_SETTINGS = { markerColor: "#00d2ff", markerShape: "arrow", routeColor: "#ff8c00", routeWidth: 4, routeOpacity: 0.85 };
 let displaySettings = { ...DEFAULT_DISPLAY_SETTINGS };
 
+// ヘッダー文字の見た目設定（1行目=GPS状態等／2行目=速度等の1行目／3行目=2行目が折り返された分）
+const DEFAULT_HDR_TEXT_SETTINGS = { row1Size: 11, row1Color: "#00ff66", row2Size: 15, row2Color: "#ffffff", row3Size: 15, row3Color: "#ffffff" };
+let hdrTextSettings = { ...DEFAULT_HDR_TEXT_SETTINGS };
+
 // ===== DOM参照 =====
 const statusText = document.getElementById("statusText");
 const backBtn = document.getElementById("backBtn");
@@ -150,6 +160,7 @@ const hdr2Need = document.getElementById("hdr2Need");
 const hdr2Saving = document.getElementById("hdr2Saving");
 const hdr2Pc = document.getElementById("hdr2Pc");
 const hdr2Shop = document.getElementById("hdr2Shop");
+const hdr2Battery = document.getElementById("hdr2Battery");
 const hdr2SpeedVal = document.getElementById("hdr2SpeedVal");
 const hdr2ElapsedVal = document.getElementById("hdr2ElapsedVal");
 const hdr2RemainTimeVal = document.getElementById("hdr2RemainTimeVal");
@@ -157,6 +168,7 @@ const hdr2NeedVal = document.getElementById("hdr2NeedVal");
 const hdr2SavingVal = document.getElementById("hdr2SavingVal");
 const hdr2PcVal = document.getElementById("hdr2PcVal");
 const hdr2ShopVal = document.getElementById("hdr2ShopVal");
+const hdr2BatteryVal = document.getElementById("hdr2BatteryVal");
 const hdr2SpeedToggle = document.getElementById("hdr2SpeedToggle");
 const hdr2ElapsedToggle = document.getElementById("hdr2ElapsedToggle");
 const hdr2RemainTimeToggle = document.getElementById("hdr2RemainTimeToggle");
@@ -164,6 +176,7 @@ const hdr2NeedToggle = document.getElementById("hdr2NeedToggle");
 const hdr2SavingToggle = document.getElementById("hdr2SavingToggle");
 const hdr2PcToggle = document.getElementById("hdr2PcToggle");
 const hdr2ShopToggle = document.getElementById("hdr2ShopToggle");
+const hdr2BatteryToggle = document.getElementById("hdr2BatteryToggle");
 const layerRouteToggle = document.getElementById("layerRouteToggle");
 const layerArrowToggle = document.getElementById("layerArrowToggle");
 const layerPcToggle = document.getElementById("layerPcToggle");
@@ -192,6 +205,16 @@ const cancelDownloadBtn = document.getElementById("cancelDownloadBtn");
 const markerColorInput = document.getElementById("markerColorInput");
 const markerShapeOptions = Array.from(document.querySelectorAll(".marker-shape-option"));
 const routeColorInput = document.getElementById("routeColorInput");
+const hdrRow1SizeInput = document.getElementById("hdrRow1SizeInput");
+const hdrRow1SizeValue = document.getElementById("hdrRow1SizeValue");
+const hdrRow1ColorInput = document.getElementById("hdrRow1ColorInput");
+const hdrRow2SizeInput = document.getElementById("hdrRow2SizeInput");
+const hdrRow2SizeValue = document.getElementById("hdrRow2SizeValue");
+const hdrRow2ColorInput = document.getElementById("hdrRow2ColorInput");
+const hdrRow3SizeInput = document.getElementById("hdrRow3SizeInput");
+const hdrRow3SizeValue = document.getElementById("hdrRow3SizeValue");
+const hdrRow3ColorInput = document.getElementById("hdrRow3ColorInput");
+const resetHdrTextSettingsBtn = document.getElementById("resetHdrTextSettingsBtn");
 const routeWidthInput = document.getElementById("routeWidthInput");
 const routeWidthValue = document.getElementById("routeWidthValue");
 const routeOpacityInput = document.getElementById("routeOpacityInput");
@@ -501,10 +524,12 @@ function getNextPointRemainKm(list, currentDistKm) {
 }
 
 // ===== GPS位置とルートのマッチング（往復ルート対策：直前距離からの連続性ウィンドウ探索） =====
-function matchPositionToRoute(lat, lon, lastDist) {
+// accuracyKm: GPSの精度（誤差半径,km）。復帰直後などで精度が一時的に悪いフィックスを誤って弾かないよう、許容距離に反映する。
+// forceFullSearch: trueの場合、直前距離からのウィンドウ絞り込みをせず全ルートから探索する（アプリ復帰直後などの再同期用）。
+function matchPositionToRoute(lat, lon, lastDist, accuracyKm, forceFullSearch) {
   if (routePoints.length === 0) return null;
   let candidates = routePoints;
-  if (lastDist !== null && !isNaN(lastDist)) {
+  if (!forceFullSearch && lastDist !== null && !isNaN(lastDist)) {
     const windowed = routePoints.filter(p => Math.abs(p.dist - lastDist) <= GPS_SEARCH_WINDOW_KM);
     if (windowed.length > 0) candidates = windowed;
   }
@@ -513,7 +538,8 @@ function matchPositionToRoute(lat, lon, lastDist) {
     const d = calcHaversineDistance(lat, lon, candidates[i].lat, candidates[i].lon);
     if (d < bestDist) { bestDist = d; best = candidates[i]; }
   }
-  if (!best || bestDist > GPS_MAX_MATCH_DIST_KM) return null;
+  const effectiveMaxDist = Math.max(GPS_MAX_MATCH_DIST_KM, (accuracyKm && !isNaN(accuracyKm)) ? accuracyKm * 1.5 : 0);
+  if (!best || bestDist > effectiveMaxDist) return null;
   return best.dist;
 }
 
@@ -694,6 +720,127 @@ resetDisplaySettingsBtn.addEventListener("click", () => {
 resetIconPositionsBtn.addEventListener("click", () => {
   resetFloatingIconPositions();
   alert("地図上アイコンの位置を初期状態に戻しました。");
+});
+
+// ===== バッテリー残量の監視 =====
+// Monaca(Cordova)の cordova-plugin-battery-status が入っていればそちらのイベントを優先的に使う。
+// 未導入の場合はWeb標準のBattery Status API（対応ブラウザのみ）にフォールバックする。
+// どちらも使えない環境では取得できないため、ヘッダーには「--」を表示する。
+function updateBatteryHeaderDisplay() {
+  if (!hdr2BatteryToggle.checked) return;
+  if (currentBatteryLevel === null) { hdr2BatteryVal.innerText = "--"; return; }
+  const chargeMark = currentBatteryCharging ? "⚡" : "";
+  hdr2BatteryVal.innerText = `${Math.round(currentBatteryLevel)}${chargeMark}`;
+  hdr2Battery.classList.toggle("hdr2-battery-low", currentBatteryLevel <= 15 && !currentBatteryCharging);
+}
+function initBatteryMonitoring() {
+  // Cordovaのバッテリープラグイン（対応していれば'batterystatus'イベントが発火する）
+  window.addEventListener("batterystatus", (info) => {
+    currentBatteryLevel = info.level;
+    currentBatteryCharging = !!info.isPlugged;
+    updateBatteryHeaderDisplay();
+  }, false);
+  // Web標準のBattery Status API（対応ブラウザのみ。unsupportedなら静かに諦める）
+  if (navigator.getBattery) {
+    navigator.getBattery().then((battery) => {
+      const update = () => {
+        currentBatteryLevel = Math.round(battery.level * 100);
+        currentBatteryCharging = !!battery.charging;
+        updateBatteryHeaderDisplay();
+      };
+      update();
+      battery.addEventListener("levelchange", update);
+      battery.addEventListener("chargingchange", update);
+    }).catch(() => {});
+  }
+}
+// ===== ヘッダー文字の見た目設定（1行目/2行目/3行目の文字サイズ・色） =====
+function loadHdrTextSettings() {
+  try {
+    const raw = localStorage.getItem("hdrTextSettings");
+    if (raw) hdrTextSettings = { ...DEFAULT_HDR_TEXT_SETTINGS, ...JSON.parse(raw) };
+  } catch (e) { hdrTextSettings = { ...DEFAULT_HDR_TEXT_SETTINGS }; }
+}
+function saveHdrTextSettings() {
+  localStorage.setItem("hdrTextSettings", JSON.stringify(hdrTextSettings));
+}
+function applyHdrTextSettingsToUI() {
+  hdrRow1SizeInput.value = hdrTextSettings.row1Size;
+  hdrRow1SizeValue.innerText = hdrTextSettings.row1Size;
+  hdrRow1ColorInput.value = hdrTextSettings.row1Color;
+  hdrRow2SizeInput.value = hdrTextSettings.row2Size;
+  hdrRow2SizeValue.innerText = hdrTextSettings.row2Size;
+  hdrRow2ColorInput.value = hdrTextSettings.row2Color;
+  hdrRow3SizeInput.value = hdrTextSettings.row3Size;
+  hdrRow3SizeValue.innerText = hdrTextSettings.row3Size;
+  hdrRow3ColorInput.value = hdrTextSettings.row3Color;
+}
+function applyHdrTextSettingsToCss() {
+  const root = document.documentElement.style;
+  root.setProperty("--hdr-row1-size", hdrTextSettings.row1Size + "px");
+  root.setProperty("--hdr-row1-color", hdrTextSettings.row1Color);
+  root.setProperty("--hdr-row2-size", hdrTextSettings.row2Size + "px");
+  root.setProperty("--hdr-row2-color", hdrTextSettings.row2Color);
+  root.setProperty("--hdr-row3-size", hdrTextSettings.row3Size + "px");
+  root.setProperty("--hdr-row3-color", hdrTextSettings.row3Color);
+}
+hdrRow1SizeInput.addEventListener("input", () => {
+  hdrTextSettings.row1Size = Number(hdrRow1SizeInput.value);
+  hdrRow1SizeValue.innerText = hdrTextSettings.row1Size;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+hdrRow1ColorInput.addEventListener("input", () => {
+  hdrTextSettings.row1Color = hdrRow1ColorInput.value;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+hdrRow2SizeInput.addEventListener("input", () => {
+  hdrTextSettings.row2Size = Number(hdrRow2SizeInput.value);
+  hdrRow2SizeValue.innerText = hdrTextSettings.row2Size;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+hdrRow2ColorInput.addEventListener("input", () => {
+  hdrTextSettings.row2Color = hdrRow2ColorInput.value;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+hdrRow3SizeInput.addEventListener("input", () => {
+  hdrTextSettings.row3Size = Number(hdrRow3SizeInput.value);
+  hdrRow3SizeValue.innerText = hdrTextSettings.row3Size;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+hdrRow3ColorInput.addEventListener("input", () => {
+  hdrTextSettings.row3Color = hdrRow3ColorInput.value;
+  applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+resetHdrTextSettingsBtn.addEventListener("click", () => {
+  hdrTextSettings = { ...DEFAULT_HDR_TEXT_SETTINGS };
+  applyHdrTextSettingsToUI(); applyHdrTextSettingsToCss(); saveHdrTextSettings();
+});
+
+// ヘッダー2行目の各項目が実際にどの行へ折り返されたかを実測し、2行目/3行目それぞれに
+// 別の文字サイズ・色を適用できるようクラスを付け替える（3行目以降はまとめて「3行目」の見た目にする）
+function tagHdr2LineGroups() {
+  const visibleItems = HDR2_ITEMS.filter(item => item.toggle.checked);
+  visibleItems.forEach(item => item.el.classList.remove("hdr2-row2-line", "hdr2-row3-line"));
+  if (visibleItems.length === 0) return;
+  const tops = [];
+  visibleItems.forEach(item => {
+    const top = item.el.offsetTop;
+    if (!tops.includes(top)) tops.push(top);
+  });
+  tops.sort((a, b) => a - b);
+  visibleItems.forEach(item => {
+    const lineIdx = tops.indexOf(item.el.offsetTop);
+    item.el.classList.add(lineIdx === 0 ? "hdr2-row2-line" : "hdr2-row3-line");
+  });
+}
+let hdr2LineRetagTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(hdr2LineRetagTimer);
+  hdr2LineRetagTimer = setTimeout(tagHdr2LineGroups, 150);
+});
+window.addEventListener("orientationchange", () => {
+  clearTimeout(hdr2LineRetagTimer);
+  hdr2LineRetagTimer = setTimeout(tagHdr2LineGroups, 300);
 });
 
 // ===== レイヤー表示ON/OFFトグル =====
@@ -1074,13 +1221,19 @@ function updatePaceDisplay(latitude, longitude) {
 }
 
 function onGpsPosition(pos) {
-  const { latitude, longitude, heading } = pos.coords;
+  const { latitude, longitude, heading, accuracy } = pos.coords;
   updateCurrentMarker(latitude, longitude, (heading === undefined ? null : heading));
   updatePaceDisplay(latitude, longitude);
   if (routePoints.length > 0) {
-    const matched = matchPositionToRoute(latitude, longitude, lastMatchedDist);
+    // アプリを閉じる/バックグラウンドから復帰した直後など、しばらくマッチが途絶えていた場合は
+    // 直前距離ベースのウィンドウ絞り込みをせず全ルートから探索し、素早く正しい位置に再同期する
+    const gapSec = lastMatchSuccessTime ? (Date.now() - lastMatchSuccessTime) / 1000 : Infinity;
+    const forceFullSearch = gapSec > 20;
+    const accuracyKm = (typeof accuracy === "number" && !isNaN(accuracy)) ? accuracy / 1000 : null;
+    const matched = matchPositionToRoute(latitude, longitude, lastMatchedDist, accuracyKm, forceFullSearch);
     if (matched !== null) {
       lastMatchedDist = matched;
+      lastMatchSuccessTime = Date.now();
       // 通過済み（グレー）表示は最大到達距離を基準にする。同じ道を戻っても既にグレー化した区間がオレンジに戻らないようにするため。
       if (matched > maxMatchedDist) maxMatchedDist = matched;
       setStatus(`現在 ${matched.toFixed(1)} km地点`);
@@ -1133,12 +1286,21 @@ wakeLockToggle.addEventListener("change", () => {
   localStorage.setItem("wakeLockPreferred", String(wakeLockToggle.checked));
   if (wakeLockToggle.checked) requestWakeLock(); else releaseWakeLock();
 });
-// 画面が再びアクティブになった際（バックグラウンドから復帰等）、希望がONならWake Lockを再取得する
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && localStorage.getItem("wakeLockPreferred") !== "false" && !wakeLockEnabled) {
+// 画面が再びアクティブになった際（バックグラウンドから復帰等）、希望がONならWake Lockを再取得し、
+// 残り距離等の表示を早く再同期させるため即座に新しいGPSフィックスを取得する
+function onAppResumeVisible() {
+  if (localStorage.getItem("wakeLockPreferred") !== "false" && !wakeLockEnabled) {
     requestWakeLock();
   }
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(onGpsPosition, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") onAppResumeVisible();
 });
+// Cordova(Monaca)環境ではvisibilitychangeが発火しない場合があるため、resumeイベントにも対応する
+document.addEventListener("resume", onAppResumeVisible, false);
 
 
 // ===== 地図の手動操作でフォロー解除 =====
@@ -1171,6 +1333,10 @@ function initMap() {
   applyDisplaySettingsToUI();
   document.documentElement.style.setProperty("--marker-color", displaySettings.markerColor);
   document.documentElement.style.setProperty("--route-arrow-color", displaySettings.routeColor);
+  loadHdrTextSettings();
+  applyHdrTextSettingsToUI();
+  applyHdrTextSettingsToCss();
+  initBatteryMonitoring();
   loadOffRouteSoundSetting();
   initHdr2Items();
   loadHdr2Settings();
