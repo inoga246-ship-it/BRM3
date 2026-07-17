@@ -4,16 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BRM Pace Manager</title>
-<link rel="stylesheet" href="css/style.css">
-
-<!-- PWA対応 -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#08090c">
-<link rel="icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#000000">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="BRM Pace">
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="container">
@@ -46,7 +40,10 @@
               <option value="300,20">300km (20h)</option>
               <option value="400,27">400km (27h)</option>
               <option value="600,40">600km (40h)</option>
+              <option value="custom,0">📍 GPX距離を使用（自由入力）</option>
             </select>
+            <input type="number" id="customLimitHours" placeholder="制限時間(h)" step="0.1" min="0"
+              style="display:none; margin-top:6px; width:100%; box-sizing:border-box;">
           </div>
           <div class="card-center half">
             <label class="label-center" style="color: #fff;">START日時</label>
@@ -282,13 +279,14 @@ PC2, 山城大橋, 68.0km"></textarea>
 <script src="cordova.js"></script>
 <script src="js/script.js"></script>
 <script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch((err) => {
-      console.warn("SW registration failed:", err);
+  // PWA用 Service Worker登録（Monacaアプリ内実行時は navigator.serviceWorker が
+  // 使えない場合があるため存在チェックしてから登録）
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js')
+        .catch((err) => console.warn('SW registration failed:', err));
     });
-  });
-}
+  }
 </script>
 </body>
 </html>
