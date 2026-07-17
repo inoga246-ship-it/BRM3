@@ -1,4 +1,5 @@
 const brm = document.getElementById("brm");
+const customLimitHours = document.getElementById("customLimitHours");
 const startTime = document.getElementById("startTime");
 const distance = document.getElementById("distance");
 const pcInput = document.getElementById("pcInput");
@@ -70,6 +71,35 @@ let globalPCList = [];
 let globalShopList = []; 
 let gpxTrackPoints = []; // GPXから解析した全トラックポイント [{lat, lon, ele, dist, gain}]
 
+// ===== BRM以外のイベントにも対応：目標距離・制限時間の取得 =====
+// brm.value が "custom,0" の場合、GPXの実測距離を目標距離として使い、
+// 制限時間はユーザーが customLimitHours に入力した値を使う。
+// それ以外（通常のBRM選択）の場合は従来どおり "距離,制限時間" をパースする。
+function getBrmTargetAndLimit() {
+  const brmVal = brm.value || "200,13.5";
+  if (brmVal.startsWith("custom")) {
+    const targetDistance = gpxTrackPoints.length > 0
+      ? gpxTrackPoints[gpxTrackPoints.length - 1].dist
+      : 0;
+    const limitHours = parseFloat(customLimitHours.value) || 0;
+    return [targetDistance, limitHours];
+  }
+  return brmVal.split(",").map(Number);
+}
+
+// 「GPX距離を使用」選択時だけ制限時間の自由入力欄を表示する
+function updateCustomLimitVisibility() {
+  customLimitHours.style.display = brm.value.startsWith("custom") ? "block" : "none";
+}
+brm.addEventListener("change", () => {
+  updateCustomLimitVisibility();
+  update(true);
+});
+customLimitHours.addEventListener("input", () => {
+  localStorage.setItem("customLimitHours", customLimitHours.value);
+  update(true);
+});
+
 // 進捗バー拡大表示用の状態（0:全体表示 / 1:前2km+後38km＝計40km / 2:前2km+後18km＝計20km）
 let zoomLevel = 0;
 let zoomBaseStart = 0;
@@ -103,6 +133,8 @@ brm.value = localStorage.getItem("brm") || "200,13.5";
 distance.value = localStorage.getItem("distance") || "";
 pcInput.value = localStorage.getItem("pcList3") || defaultPCList;
 shopInput.value = localStorage.getItem("shopList3") || defaultShopList;
+customLimitHours.value = localStorage.getItem("customLimitHours") || "";
+updateCustomLimitVisibility();
 
 // GPXトラックデータの復元
 try {
@@ -156,8 +188,7 @@ shopToggle.addEventListener("change", () => {
     document.body.classList.add("shop-off");
     shopCard.style.display = "none";
   }
-  const brmVal = brm.value || "200,13.5";
-  const [targetDistance] = brmVal.split(",").map(Number);
+  const [targetDistance] = getBrmTargetAndLimit();
   renderGraphScale(targetDistance);
   updateDisplayOnly();
 });
@@ -180,10 +211,16 @@ distance.addEventListener("blur", () => { if (distance.value === "") { distance.
 
 // ===== 地図アプリの起動 =====
 function openNativeMap(url) {
-  const iab = window.cordova && (window.cordova.InAppBrowser || (window.cordova.plugins && window.cordova.plugins.inAppBrowser));
-  if (iab) {
-    iab.open(url, "_system", "");
+  if (window.cordova) {
+    // Cordova/Monaca環境：'_system' を指定してOSにURLを渡す
+    // → geo: URIならAndroidのマップアプリ（Google Maps等）がintentで起動する
+    // InAppBrowserプラグインがwindow.open自体を上書きしているため、
+    // cordova.InAppBrowser等のオブジェクト存在チェックは行わない
+    // （バージョンによってはこのチェックがfalsyになり、意図せず
+    //   アプリ内蔵ブラウザ（"_blank"）に落ちてしまう不具合があったため）
+    window.open(url, "_system");
   } else {
+    // 通常ブラウザ：新規タブで開く
     window.open(url, "_blank");
   }
 }
@@ -251,7 +288,7 @@ graphScale.addEventListener("pointermove", (e) => {
   const deltaKm = (dx / widthPx) * spanKm;
   // 指を左にドラッグ(dx<0)すると先(GOAL方向)の情報が見えるようにする
   zoomPanOffsetKm = panStartOffsetKm - deltaKm;
-  const [targetDistance] = (brm.value || "200,13.5").split(",").map(Number);
+  const [targetDistance] = getBrmTargetAndLimit();
   renderGraphScale(targetDistance);
 });
 graphScale.addEventListener("pointerup", (e) => {
@@ -363,13 +400,15 @@ gpxFileInput.addEventListener("change", (e) => {
       if (shopTextLines.length > 0) shopInput.value = shopTextLines.map(item => item.text).join("\n");
       
       const finalRouteDist = Math.ceil(totalDist);
-      if (finalRouteDist > 50) {
+      if (finalRouteDist > 50 && !brm.value.startsWith("custom")) {
+        // 「GPX距離を使用」モード選択中はBRM標準距離への自動置き換えを行わない
         let matchedBrmVal = "200,13.5";
         if (finalRouteDist > 550) matchedBrmVal = "600,40";
         else if (finalRouteDist > 350) matchedBrmVal = "400,27";
         else if (finalRouteDist > 250) matchedBrmVal = "300,20";
         brm.value = matchedBrmVal;
       }
+      updateCustomLimitVisibility();
       
       isPcUserNavigating = false;
       isShopUserNavigating = false;
@@ -524,7 +563,7 @@ deleteBtn.addEventListener("click", () => {
   }
 });
 
-const BACKUP_KEYS = ["startTime", "brm", "distance", "pcList3", "shopList3", "customBRMDataSets3", "shopToggleState", "mapDblClickState", "convenienceBtnState", "gpxTrackPoints"];
+const BACKUP_KEYS = ["startTime", "brm", "distance", "pcList3", "shopList3", "customBRMDataSets3", "shopToggleState", "mapDblClickState", "convenienceBtnState", "gpxTrackPoints", "customLimitHours"];
 
 exportBtn.addEventListener("click", () => {
   const backupData = {};
@@ -558,6 +597,8 @@ importFileInput.addEventListener("change", (e) => {
       distance.value = localStorage.getItem("distance") || "";
       pcInput.value = localStorage.getItem("pcList3") || "";
       shopInput.value = localStorage.getItem("shopList3") || "";
+      customLimitHours.value = localStorage.getItem("customLimitHours") || "";
+      updateCustomLimitVisibility();
 
       try {
         const cachedGpx = localStorage.getItem("gpxTrackPoints");
@@ -590,10 +631,10 @@ importFileInput.addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 
-pcPrevBtn.addEventListener("click", () => { if (globalPCList.length === 0) return; if (pcDisplayIdx > 0) { isPcUserNavigating = true; pcDisplayIdx--; const brmVal = brm.value || "200,13.5"; const [targetDistance] = brmVal.split(",").map(Number); renderGraphScale(targetDistance); updateDisplayOnly(); } });
-pcNextBtn.addEventListener("click", () => { if (globalPCList.length === 0) return; if (pcDisplayIdx < globalPCList.length - 1) { isPcUserNavigating = true; pcDisplayIdx++; const brmVal = brm.value || "200,13.5"; const [targetDistance] = brmVal.split(",").map(Number); renderGraphScale(targetDistance); updateDisplayOnly(); } });
-shopPrevBtn.addEventListener("click", () => { if (globalShopList.length === 0) return; if (shopDisplayIdx > 0) { isShopUserNavigating = true; shopDisplayIdx--; const brmVal = brm.value || "200,13.5"; const [targetDistance] = brmVal.split(",").map(Number); renderGraphScale(targetDistance); updateDisplayOnly(); } });
-shopNextBtn.addEventListener("click", () => { if (globalShopList.length === 0) return; if (shopDisplayIdx < globalShopList.length - 1) { isShopUserNavigating = true; shopDisplayIdx++; const brmVal = brm.value || "200,13.5"; const [targetDistance] = brmVal.split(",").map(Number); renderGraphScale(targetDistance); updateDisplayOnly(); } });
+pcPrevBtn.addEventListener("click", () => { if (globalPCList.length === 0) return; if (pcDisplayIdx > 0) { isPcUserNavigating = true; pcDisplayIdx--; const [targetDistance] = getBrmTargetAndLimit(); renderGraphScale(targetDistance); updateDisplayOnly(); } });
+pcNextBtn.addEventListener("click", () => { if (globalPCList.length === 0) return; if (pcDisplayIdx < globalPCList.length - 1) { isPcUserNavigating = true; pcDisplayIdx++; const [targetDistance] = getBrmTargetAndLimit(); renderGraphScale(targetDistance); updateDisplayOnly(); } });
+shopPrevBtn.addEventListener("click", () => { if (globalShopList.length === 0) return; if (shopDisplayIdx > 0) { isShopUserNavigating = true; shopDisplayIdx--; const [targetDistance] = getBrmTargetAndLimit(); renderGraphScale(targetDistance); updateDisplayOnly(); } });
+shopNextBtn.addEventListener("click", () => { if (globalShopList.length === 0) return; if (shopDisplayIdx < globalShopList.length - 1) { isShopUserNavigating = true; shopDisplayIdx++; const [targetDistance] = getBrmTargetAndLimit(); renderGraphScale(targetDistance); updateDisplayOnly(); } });
 
 function formatArrivalDate(targetDate, startStr) {
   if (!startStr) return "--:--"; const start = new Date(startStr); const hrs = String(targetDate.getHours()).padStart(2, '0'); const mins = String(targetDate.getMinutes()).padStart(2, '0');
@@ -736,8 +777,7 @@ function createScalePoint(leftPct, label, className, topStyle, bottomStyle) {
 
 // 進捗バー（とその周辺）のタップで、全体表示→前2km+後38km(計40km)→前2km+後18km(計20km)→全体表示...の3段階を循環する
 function cycleZoomLevel() {
-  const brmVal = brm.value || "200,13.5";
-  const [targetDistance] = brmVal.split(",").map(Number);
+  const [targetDistance] = getBrmTargetAndLimit();
   zoomLevel = (zoomLevel + 1) % 3;
   zoomPanOffsetKm = 0;
   if (zoomLevel !== 0) {
@@ -826,14 +866,13 @@ function parseTextList(textData, isPCMode = false) {
 }
 
 function persistInputs() {
-  localStorage.setItem("startTime", startTime.value); localStorage.setItem("brm", brm.value); localStorage.setItem("distance", distance.value); localStorage.setItem("pcList3", pcInput.value); localStorage.setItem("shopList3", shopInput.value);
+  localStorage.setItem("startTime", startTime.value); localStorage.setItem("brm", brm.value); localStorage.setItem("distance", distance.value); localStorage.setItem("pcList3", pcInput.value); localStorage.setItem("shopList3", shopInput.value); localStorage.setItem("customLimitHours", customLimitHours.value);
 }
 
 function update(isDistanceOrInputChanged = false) {
   const now = new Date(); document.getElementById("currentTime").innerText = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
   const currentDist = parseFloat(distance.value) || 0; 
-  const brmVal = brm.value || "200,13.5";
-  const [targetDistance, limitHours] = brmVal.split(",").map(Number);
+  const [targetDistance, limitHours] = getBrmTargetAndLimit();
   
   if (pcInput.value !== lastPcInputText) { globalPCList = parseTextList(pcInput.value, true); lastPcInputText = pcInput.value; }
   if (shopInput.value !== lastShopInputText) { globalShopList = parseTextList(shopInput.value, false); lastShopInputText = shopInput.value; }
