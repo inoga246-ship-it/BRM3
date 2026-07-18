@@ -52,6 +52,8 @@ const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 let HDR2_ITEMS;
 function initHdr2Items() {
   HDR2_ITEMS = [
+    { toggle: hdr1ShowToggle, el: hdr1Pace, sep: ".hdr1-pace-sep", key: "hdr1Pace" },
+    { toggle: hdr1ShowToggle, el: hdr1Status, sep: ".hdr1-status-sep", key: "hdr1Status" },
     { toggle: hdr2SpeedToggle, el: hdr2Speed, sep: ".hdr2-speed-sep", key: "hdr2Speed" },
     { toggle: hdr2ElapsedToggle, el: hdr2Elapsed, sep: ".hdr2-elapsed-sep", key: "hdr2Elapsed" },
     { toggle: hdr2RemainTimeToggle, el: hdr2RemainTime, sep: ".hdr2-remaintime-sep", key: "hdr2RemainTime" },
@@ -83,14 +85,14 @@ function applyHdr2Visibility() {
   // 各セパレータはDOM上でitem[idx]の直後・item[idx+1]の直前にあるため、その両隣が表示されている時だけ表示する
   HDR2_ITEMS.forEach((item, idx) => {
     if (!item.sep) return;
-    const sepEl = headerRow2.querySelector(item.sep);
+    const sepEl = headerInfoWrap.querySelector(item.sep);
     if (!sepEl) return;
     const leftVisible = item.toggle.checked;
     const rightVisible = (idx + 1 < HDR2_ITEMS.length) && HDR2_ITEMS[idx + 1].toggle.checked;
     sepEl.style.display = (leftVisible && rightVisible) ? "inline" : "none";
   });
   const anyVisible = HDR2_ITEMS.some(i => i.toggle.checked);
-  headerRow2.style.display = anyVisible ? "flex" : "none";
+  headerInfoWrap.style.display = anyVisible ? "flex" : "none";
   tagHdr2LineGroups();
   updateBatteryHeaderDisplay();
 }
@@ -152,7 +154,10 @@ const statusText = document.getElementById("statusText");
 const backBtn = document.getElementById("backBtn");
 const headerGross = document.getElementById("headerGross");
 const headerRemain = document.getElementById("headerRemain");
-const headerRow2 = document.getElementById("headerRow2");
+const headerInfoWrap = document.getElementById("headerInfoWrap");
+const hdr1ShowToggle = document.getElementById("hdr1ShowToggle");
+const hdr1Pace = document.getElementById("hdr1Pace");
+const hdr1Status = document.getElementById("hdr1Status");
 const hdr2Speed = document.getElementById("hdr2Speed");
 const hdr2Elapsed = document.getElementById("hdr2Elapsed");
 const hdr2RemainTime = document.getElementById("hdr2RemainTime");
@@ -1164,7 +1169,11 @@ function updatePaceDisplay(latitude, longitude) {
       const elapsedHour = (now - start.getTime()) / 3600000;
       if (elapsedHour > 0 && currentDist > 0) grossKph = currentDist / elapsedHour;
     }
-    remainKm = Math.max(0, targetDistance - (lastMatchedDist || 0));
+    // 残り距離はGPXルートの実際の総距離を優先して算出する（公称のブルベ距離とGPXの実測距離はずれることがあるため）。
+    // GPXが未読込の場合はBRM-mainで設定された公称距離にフォールバックする。
+    const routeTotalDist = (routePoints.length > 0) ? routePoints[routePoints.length - 1].dist : null;
+    const remainBaseDist = routeTotalDist !== null ? routeTotalDist : targetDistance;
+    remainKm = Math.max(0, remainBaseDist - (lastMatchedDist || 0));
   } catch (e) {}
 
   // ヘッダー更新（1段目）

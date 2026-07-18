@@ -14,32 +14,34 @@
 </div>
 
 <div class="map-header">
-  <div class="map-header-row1">
+  <div class="map-header-bar">
     <button id="backBtn" title="ペース管理に戻る">← 戻る</button>
-    <div class="header-pace-display">
-      <span id="headerGross" class="header-pace-value">--</span>
-      <span class="header-pace-sep">/</span>
-      <span id="headerRemain" class="header-pace-value">--</span>
+    <div class="map-header-info-wrap" id="headerInfoWrap">
+      <span class="hdr2-item hdr1-item" id="hdr1Pace" style="display:none;">
+        <span id="headerGross" class="header-pace-value">--</span><span class="header-pace-sep">/</span><span id="headerRemain" class="header-pace-value">--</span>
+      </span>
+      <span class="hdr2-sep hdr1-pace-sep" style="display:none;">│</span>
+      <span class="hdr2-item hdr1-item" id="hdr1Status" style="display:none;">
+        <span id="statusText" class="map-status">GPS待機中…</span>
+      </span>
+      <span class="hdr2-sep hdr1-status-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Speed" style="display:none;"><span class="hdr2-label">速度</span><span class="hdr2-value" id="hdr2SpeedVal">--</span><span class="hdr2-unit">km/h</span></span>
+      <span class="hdr2-sep hdr2-speed-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Elapsed" style="display:none;"><span class="hdr2-label">経過</span><span class="hdr2-value" id="hdr2ElapsedVal">--</span></span>
+      <span class="hdr2-sep hdr2-elapsed-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2RemainTime" style="display:none;"><span class="hdr2-label">残時間</span><span class="hdr2-value" id="hdr2RemainTimeVal">--</span></span>
+      <span class="hdr2-sep hdr2-remaintime-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Need" style="display:none;"><span class="hdr2-label">必要</span><span class="hdr2-value" id="hdr2NeedVal">--</span><span class="hdr2-unit">km/h</span></span>
+      <span class="hdr2-sep hdr2-need-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Saving" style="display:none;"><span class="hdr2-label">貯金</span><span class="hdr2-value" id="hdr2SavingVal">--</span></span>
+      <span class="hdr2-sep hdr2-saving-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Pc" style="display:none;"><span class="hdr2-label">PC</span><span class="hdr2-value" id="hdr2PcVal">--</span><span class="hdr2-unit">km</span></span>
+      <span class="hdr2-sep hdr2-pc-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Shop" style="display:none;"><span class="hdr2-label">🏪</span><span class="hdr2-value" id="hdr2ShopVal">--</span><span class="hdr2-unit">km</span></span>
+      <span class="hdr2-sep hdr2-shop-sep" style="display:none;">│</span>
+      <span class="hdr2-item" id="hdr2Battery" style="display:none;"><span class="hdr2-label">🔋</span><span class="hdr2-value" id="hdr2BatteryVal">--</span><span class="hdr2-unit">%</span></span>
     </div>
-    <span id="statusText" class="map-status">GPS待機中…</span>
     <button id="menuBtn" title="メニュー">☰</button>
-  </div>
-  <div class="map-header-row2" id="headerRow2">
-    <span class="hdr2-item" id="hdr2Speed" style="display:none;"><span class="hdr2-label">速度</span><span class="hdr2-value" id="hdr2SpeedVal">--</span><span class="hdr2-unit">km/h</span></span>
-    <span class="hdr2-sep hdr2-speed-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Elapsed" style="display:none;"><span class="hdr2-label">経過</span><span class="hdr2-value" id="hdr2ElapsedVal">--</span></span>
-    <span class="hdr2-sep hdr2-elapsed-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2RemainTime" style="display:none;"><span class="hdr2-label">残時間</span><span class="hdr2-value" id="hdr2RemainTimeVal">--</span></span>
-    <span class="hdr2-sep hdr2-remaintime-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Need" style="display:none;"><span class="hdr2-label">必要</span><span class="hdr2-value" id="hdr2NeedVal">--</span><span class="hdr2-unit">km/h</span></span>
-    <span class="hdr2-sep hdr2-need-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Saving" style="display:none;"><span class="hdr2-label">貯金</span><span class="hdr2-value" id="hdr2SavingVal">--</span></span>
-    <span class="hdr2-sep hdr2-saving-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Pc" style="display:none;"><span class="hdr2-label">PC</span><span class="hdr2-value" id="hdr2PcVal">--</span><span class="hdr2-unit">km</span></span>
-    <span class="hdr2-sep hdr2-pc-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Shop" style="display:none;"><span class="hdr2-label">🏪</span><span class="hdr2-value" id="hdr2ShopVal">--</span><span class="hdr2-unit">km</span></span>
-    <span class="hdr2-sep hdr2-shop-sep" style="display:none;">│</span>
-    <span class="hdr2-item" id="hdr2Battery" style="display:none;"><span class="hdr2-label">🔋</span><span class="hdr2-value" id="hdr2BatteryVal">--</span><span class="hdr2-unit">%</span></span>
   </div>
 </div>
 
@@ -77,6 +79,10 @@
     <p class="map-menu-note">Wi-Fi等の通信環境がある場所で実行してください。完了後はオフラインでも保存済みの範囲が地図表示に使えます。</p>
 
     <div class="map-menu-section-title">ヘッダー2行目の表示項目</div>
+    <div class="map-menu-row">
+      <label for="hdr1ShowToggle">📊 1行目（GPS状態／グロス速度・残り距離）</label>
+      <input type="checkbox" id="hdr1ShowToggle" checked>
+    </div>
     <div class="map-menu-row">
       <label for="hdr2SpeedToggle">🚀 現在速度</label>
       <input type="checkbox" id="hdr2SpeedToggle">

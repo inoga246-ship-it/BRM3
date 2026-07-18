@@ -133,25 +133,22 @@ html, body {
   padding-top: env(safe-area-inset-top);
   background: linear-gradient(180deg, rgba(8, 10, 15, 0.94) 0%, rgba(8, 10, 15, 0.6) 100%);
 }
-.map-header-row1 {
+.map-header-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   padding: 8px 10px 6px;
 }
-.map-header-row2 {
+.map-header-info-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  padding: 3px 10px 6px;
   flex-wrap: wrap;
-  row-gap: 2px;
-  min-height: 0;
-}
-.map-header-row2:empty,
-.map-header-row2.hidden {
-  display: none;
+  gap: 0;
+  row-gap: 4px;
+  padding-top: 2px; /* backBtn/menuBtnとベースラインを合わせる */
 }
 .hdr2-item {
   display: inline-flex;
@@ -198,14 +195,7 @@ html, body {
   flex-shrink: 0;
 }
 
-/* ヘッダー中央：グロス速度 / 残り距離 */
-.header-pace-display {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
+/* ヘッダー：グロス速度 / 残り距離（1行目情報。折り返しウィンドウ内の項目として表示される） */
 .header-pace-value {
   font-size: var(--hdr-row1-size);
   font-weight: bold;
