@@ -52,8 +52,8 @@ const offRouteSoundToggle = document.getElementById("offRouteSoundToggle");
 let HDR2_ITEMS;
 function initHdr2Items() {
   HDR2_ITEMS = [
-    { toggle: hdr1ShowToggle, el: hdr1Pace, sep: ".hdr1-pace-sep", key: "hdr1Pace" },
-    { toggle: hdr1ShowToggle, el: hdr1Status, sep: ".hdr1-status-sep", key: "hdr1Status" },
+    { toggle: hdr1PaceToggle, el: hdr1Pace, sep: ".hdr1-pace-sep", key: "hdr1Pace" },
+    { toggle: hdr1StatusToggle, el: hdr1Status, sep: ".hdr1-status-sep", key: "hdr1Status" },
     { toggle: hdr2SpeedToggle, el: hdr2Speed, sep: ".hdr2-speed-sep", key: "hdr2Speed" },
     { toggle: hdr2ElapsedToggle, el: hdr2Elapsed, sep: ".hdr2-elapsed-sep", key: "hdr2Elapsed" },
     { toggle: hdr2RemainTimeToggle, el: hdr2RemainTime, sep: ".hdr2-remaintime-sep", key: "hdr2RemainTime" },
@@ -155,7 +155,8 @@ const backBtn = document.getElementById("backBtn");
 const headerGross = document.getElementById("headerGross");
 const headerRemain = document.getElementById("headerRemain");
 const headerInfoWrap = document.getElementById("headerInfoWrap");
-const hdr1ShowToggle = document.getElementById("hdr1ShowToggle");
+const hdr1StatusToggle = document.getElementById("hdr1StatusToggle");
+const hdr1PaceToggle = document.getElementById("hdr1PaceToggle");
 const hdr1Pace = document.getElementById("hdr1Pace");
 const hdr1Status = document.getElementById("hdr1Status");
 const hdr2Speed = document.getElementById("hdr2Speed");
