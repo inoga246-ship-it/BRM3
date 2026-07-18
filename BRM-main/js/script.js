@@ -131,8 +131,8 @@ function toHalfWidthAlphaNum(str) {
 startTime.value = localStorage.getItem("startTime") || "";
 brm.value = localStorage.getItem("brm") || "200,13.5";
 distance.value = localStorage.getItem("distance") || "";
-pcInput.value = localStorage.getItem("pcList3") || defaultPCList;
-shopInput.value = localStorage.getItem("shopList3") || defaultShopList;
+pcInput.value = localStorage.getItem("pcList3") || "";
+shopInput.value = localStorage.getItem("shopList3") || "";
 customLimitHours.value = localStorage.getItem("customLimitHours") || "";
 updateCustomLimitVisibility();
 
